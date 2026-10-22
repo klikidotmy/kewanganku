@@ -13,7 +13,7 @@ const TABS = {
   Transactions: ['id', 'date', 'type', 'amount', 'account_id', 'to_account_id', 'category_id', 'commitment_id', 'note', 'source', 'created_at', 'updated_at'],
   Accounts: ['id', 'name', 'type', 'group', 'last4', 'opening_balance', 'credit_limit', 'color', 'order', 'archived', 'note'],
   Categories: ['id', 'name', 'kind', 'group', 'icon', 'budget', 'order', 'archived'],
-  Commitments: ['id', 'name', 'amount', 'due_day', 'category_id', 'account_id', 'start_month', 'end_month', 'active', 'note'],
+  Commitments: ['id', 'name', 'amount', 'due_day', 'category_id', 'account_id', 'start_month', 'end_month', 'active', 'note', 'kind', 'to_account_id'],
   Settings: ['key', 'value']
 };
 const TZ = 'Asia/Kuala_Lumpur';
@@ -88,7 +88,8 @@ function applyOp_(op) {
   if (!TABS[op.tab] || op.tab === 'Settings') throw new Error('Bad tab: ' + op.tab);
   if (!op.row || !op.row.id) throw new Error('Missing id');
   const sh = sheet_(op.tab);
-  const headers = TABS[op.tab];
+  // Headers come from the sheet itself, so new columns work without a redeploy.
+  const headers = sh.getRange(1, 1, 1, sh.getLastColumn()).getValues()[0].map(String);
   const rowIndex = findRow_(sh, op.row.id);
 
   if (op.op === 'delete') {
@@ -111,7 +112,7 @@ function applyOp_(op) {
     if (!merged.created_at) merged.created_at = now;
     merged.updated_at = now;
   }
-  const out = [headers.map(function (h) { return merged[h] === null ? '' : merged[h]; })];
+  const out = [headers.map(function (h) { return merged[h] === null || merged[h] === undefined ? '' : merged[h]; })];
   if (rowIndex > 0) {
     sh.getRange(rowIndex, 1, 1, headers.length).setValues(out);
   } else {

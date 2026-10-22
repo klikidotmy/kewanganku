@@ -1,4 +1,4 @@
-const CACHE = 'kewanganku-v1.0.0';
+const CACHE = 'kewanganku-v1.1.0';
 const SHELL = ['./', 'index.html', 'styles.css', 'app.js', 'manifest.webmanifest', 'icons/icon-192.png', 'icons/icon-512.png', 'icons/apple-touch-icon.png'];
 
 self.addEventListener('install', (e) => {

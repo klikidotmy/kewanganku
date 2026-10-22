@@ -2,7 +2,7 @@
 (() => {
   'use strict';
 
-  const VERSION = '1.0.0';
+  const VERSION = '1.1.0';
   const LS = { cfg: 'kk_cfg', data: 'kk_data', queue: 'kk_queue', ui: 'kk_ui' };
   const EXP_GROUPS = [
     ['Fixed', '🏛️'], ['Household', '🏠'], ['Telco', '📱'], ['Transport', '🚗'],
@@ -130,14 +130,43 @@
     return s;
   }
 
+
+  const commitKind = (c) => c.kind || 'expense';
+  function commitAmount(c, bal) {
+    if (num(c.amount) > 0) return num(c.amount);
+    if (commitKind(c) === 'transfer') {
+      const to = idx.acc[c.to_account_id];
+      if (to && (to.group === 'credit' || to.group === 'borrowed')) {
+        const owed = -((bal || balances())[to.id] || 0);
+        return owed > 0.004 ? round2(owed) : 0;
+      }
+    }
+    return null;
+  }
+  function commitStatus(x, m) {
+    if (x.tx) return { k: 'paid', label: `Selesai ${dayLabel(String(x.tx.date)).split(', ')[1]}` };
+    if (x.amount === 0) return { k: 'paid', label: 'Tiada hutang' };
+    const cur = todayStr().slice(0, 7);
+    const due = num(x.c.due_day);
+    if (m < cur) return { k: 'overdue', label: 'Belum direkod' };
+    if (m > cur) return { k: 'upcoming', label: due ? `${due} hb` : 'Tiada tarikh' };
+    if (!due) return { k: 'nodate', label: 'Tiada tarikh' };
+    const day = Number(todayStr().slice(8, 10));
+    if (due < day) return { k: 'overdue', label: `Lewat ${day - due} hari` };
+    if (due === day) return { k: 'today', label: 'Hari ni' };
+    return { k: 'upcoming', label: due - day === 1 ? 'Esok' : `${due - day} hari lagi` };
+  }
   function monthCommitments(m) {
+    const bal = balances();
     return (data.commitments || []).filter((c) => c.active !== false &&
       (!c.start_month || String(c.start_month) <= m) && (!c.end_month || String(c.end_month) >= m))
       .map((c) => {
         const tx = (data.transactions || []).find((t) => t.commitment_id === c.id && String(t.date).slice(0, 7) === m);
-        return { c, tx };
+        const x = { c, tx, amount: tx ? num(tx.amount) : commitAmount(c, bal) };
+        x.status = commitStatus(x, m);
+        return x;
       })
-      .sort((a, b) => (a.tx ? 1 : 0) - (b.tx ? 1 : 0) || num(a.c.due_day || 99) - num(b.c.due_day || 99));
+      .sort((a, b) => (num(a.c.due_day) || 99) - (num(b.c.due_day) || 99));
   }
 
   /* ---------- writes: optimistic + queued ---------- */
@@ -256,6 +285,7 @@
       </div></div>`;
   }
 
+
   function homeView() {
     const b = balances();
     let assets = 0, liab = 0;
@@ -263,9 +293,8 @@
     const s = monthStats(ui.month);
     const budgets = {};
     categories('expense').forEach((c) => { if (num(c.budget)) budgets[c.group] = (budgets[c.group] || 0) + num(c.budget); });
-    const commits = monthCommitments(ui.month);
-    const unpaid = commits.filter((x) => !x.tx);
-    const unpaidTotal = unpaid.reduce((n, x) => n + num(x.c.amount), 0);
+    const thisMonth = todayStr().slice(0, 7);
+    const pending = monthCommitments(thisMonth).filter((x) => x.status.k !== 'paid');
     const recent = (data.transactions || []).slice().sort((a, b) => (String(b.date) + String(b.created_at)).localeCompare(String(a.date) + String(a.created_at))).slice(0, 6);
 
     return `
@@ -278,6 +307,14 @@
           <div><span>Hutang</span><strong>${money(liab)}</strong></div>
         </div>
       </section>
+
+      ${creditPanel(b)}
+
+      <div class="section">
+        <div class="section-head"><h2>Jadual bayaran</h2><button class="link-btn" data-act="tab" data-tab="month">${esc(monthLabel(thisMonth))}</button></div>
+        ${pending.length ? timelineHtml(thisMonth, pending.slice(0, 6)) + (pending.length > 6 ? `<p class="hint"><button class="link-btn" data-act="tab" data-tab="month">Lihat semua ${pending.length} item</button></p>` : '')
+          : `<div class="empty">Semua bayaran ${esc(monthLabel(thisMonth))} dah selesai.</div>`}
+      </div>
 
       ${monthBar()}
       <div class="flow">
@@ -302,17 +339,71 @@
       </div>
 
       <div class="section">
-        <div class="section-head"><h2>Komitmen belum bayar</h2><span class="aside">${money(unpaidTotal)}</span></div>
-        ${unpaid.length ? `<div class="list">${unpaid.slice(0, 4).map(commitRow).join('')}</div>
-          ${unpaid.length > 4 ? `<p class="hint"><button class="link-btn" data-act="tab" data-tab="month">Lihat semua ${unpaid.length} komitmen</button></p>` : ''}`
-          : `<div class="empty">Semua komitmen ${esc(monthLabel(ui.month))} dah dibayar.</div>`}
-      </div>
-
-      <div class="section">
         <div class="section-head"><h2>Terkini</h2><button class="link-btn" data-act="tab" data-tab="tx">Semua</button></div>
         ${recent.length ? `<div class="list">${recent.map(txRow).join('')}</div>`
           : `<div class="empty">Belum ada transaksi.<br><button class="btn" data-act="add" style="width:auto;display:inline-flex;padding:10px 18px">Tambah transaksi pertama</button></div>`}
       </div>`;
+  }
+
+  function creditPanel(b) {
+    const list = accounts().filter((a) => a.group === 'credit');
+    if (!list.length) return '';
+    const owedOf = (a) => Math.max(0, -(b[a.id] || 0));
+    const total = list.reduce((n, a) => n + owedOf(a), 0);
+    const active = list.filter((a) => owedOf(a) > 0.004).sort((x, y) => owedOf(y) - owedOf(x));
+    const clear = list.length - active.length;
+    return `<div class="section">
+      <div class="section-head"><h2>Kad & PayLater</h2><span class="aside neg">${money(total)}</span></div>
+      ${active.length ? `<div class="list">${active.map((a) => {
+        const owed = owedOf(a), lim = num(a.credit_limit);
+        const pct = lim ? Math.min(100, (owed / lim) * 100) : 0;
+        return `<button class="row credit-row" data-act="acc" data-id="${esc(a.id)}">
+          <span class="acc-mono" style="--acc:${esc(a.color || '#D4AE68')}">${esc(initials(a.name))}</span>
+          <span class="row-main"><span class="t">${esc(a.name)}</span>
+            <span class="s">${lim ? `Baki had ${money(lim - owed)}` : 'Hutang'}</span>
+            ${lim ? `<span class="bar ${pct >= 80 ? 'over' : ''}"><i style="width:${pct}%"></i></span>` : ''}</span>
+          <span class="row-amt neg">${money(owed)}</span>
+        </button>`;
+      }).join('')}</div>` : '<div class="empty">Tiada hutang kad atau PayLater.</div>'}
+      ${clear && active.length ? `<p class="hint"><button class="link-btn" data-act="tab" data-tab="accounts">${clear} lagi tiada hutang</button></p>` : ''}
+    </div>`;
+  }
+
+  function timelineHtml(m, items) {
+    const groups = {};
+    items.forEach((x) => { const k = num(x.c.due_day) || 0; (groups[k] = groups[k] || []).push(x); });
+    const today = todayStr();
+    const keys = Object.keys(groups).map(Number).sort((a, b) => (a || 99) - (b || 99));
+    return `<div class="tl">${keys.map((d) => {
+      let dateCol = '<strong>?</strong><span>Tiada tarikh</span>';
+      let isToday = false;
+      if (d) {
+        const ds = `${m}-${String(d).padStart(2, '0')}`;
+        const [y, mo] = m.split('-').map(Number);
+        dateCol = `<strong>${d}</strong><span>${DAYS[new Date(y, mo - 1, d).getDay()].slice(0, 3)}</span>`;
+        isToday = ds === today;
+      }
+      return `<div class="tl-day ${isToday ? 'today' : ''}"><div class="tl-date">${dateCol}</div>
+        <div class="tl-items">${groups[d].map(tlItem).join('')}</div></div>`;
+    }).join('')}</div>`;
+  }
+
+  function tlItem(x) {
+    const { c, tx, status } = x;
+    const kind = commitKind(c);
+    const from = idx.acc[c.account_id], to = idx.acc[c.to_account_id];
+    let route = '';
+    if (kind === 'transfer') route = `${from ? from.name : '?'} → ${to ? to.name : '?'}`;
+    else if (kind === 'income') route = from ? `Masuk ${from.name}` : 'Pendapatan';
+    else route = from ? from.name : ((idx.cat[c.category_id] || {}).name || '');
+    let amt;
+    if (x.amount === null) amt = `<span class="faint">${kind === 'income' ? 'Ikut gaji' : 'Isi jumlah'}</span>`;
+    else amt = money(x.amount, kind === 'income', kind === 'income' ? 'pos' : '');
+    return `<button class="tl-item st-${status.k}" data-act="${tx ? 'edit-tx' : 'pay'}" data-id="${esc(tx ? tx.id : c.id)}">
+      <span class="tl-dot">${status.k === 'paid' ? icon('check') : ''}</span>
+      <span class="row-main"><span class="t">${esc(c.name)}</span><span class="s">${esc(route)}</span></span>
+      <span class="row-amt">${amt}<small class="tl-status">${esc(status.label)}</small></span>
+    </button>`;
   }
 
   function txRow(t) {
@@ -333,17 +424,7 @@
     </button>`;
   }
 
-  function commitRow(x) {
-    const { c, tx } = x;
-    const cat = idx.cat[c.category_id];
-    const sub = tx ? `Dibayar ${dayLabel(String(tx.date)).split(', ')[1]}${idx.acc[tx.account_id] ? ' · ' + idx.acc[tx.account_id].name : ''}`
-      : (c.due_day ? `Jatuh tempo ${c.due_day} hb` : (cat ? cat.name : ''));
-    return `<button class="row ${tx ? 'paid' : ''}" data-act="${tx ? 'edit-tx' : 'pay'}" data-id="${esc(tx ? tx.id : c.id)}">
-      <span class="commit-check ${tx ? 'done' : ''}">${icon('check')}</span>
-      <span class="row-main"><span class="t">${esc(c.name)}</span><span class="s">${esc(sub)}</span></span>
-      <span class="row-amt">${money(tx ? num(tx.amount) : num(c.amount))}</span>
-    </button>`;
-  }
+
 
   function accountsView() {
     const b = balances();
@@ -397,19 +478,21 @@
       }).join('') : `<div class="empty" style="margin-top:16px">${q ? 'Tiada transaksi sepadan.' : `Tiada transaksi untuk ${esc(monthLabel(ui.month))}.`}</div>`}`;
   }
 
+
   function monthView() {
     const commits = monthCommitments(ui.month);
-    const total = commits.reduce((n, x) => n + num(x.c.amount), 0);
-    const paid = commits.filter((x) => x.tx).reduce((n, x) => n + num(x.tx.amount), 0);
+    const outs = commits.filter((x) => commitKind(x.c) !== 'income');
+    const total = outs.reduce((n, x) => n + (x.amount || 0), 0);
+    const paid = outs.filter((x) => x.tx).reduce((n, x) => n + num(x.tx.amount), 0);
     const s = monthStats(ui.month);
     const budgeted = categories('expense').filter((c) => num(c.budget));
     const incomeCats = categories('income').filter((c) => s.cats[c.id]);
     return `${monthBar()}
       <div class="section" style="margin-top:14px">
-        <div class="section-head"><h2>Komitmen</h2><button class="link-btn" data-act="manage-commit">Urus</button></div>
+        <div class="section-head"><h2>Jadual bayaran</h2><button class="link-btn" data-act="manage-commit">Urus</button></div>
         <div class="progress-line"><span>Dibayar ${money(paid)}</span><span>daripada ${money(total)}</span></div>
-        <div class="bar" style="margin-bottom:12px"><i style="width:${total ? Math.min(100, (paid / total) * 100) : 0}%;background:var(--sage)"></i></div>
-        ${commits.length ? `<div class="list">${commits.map(commitRow).join('')}</div>` : '<div class="empty">Tiada komitmen aktif bulan ni.</div>'}
+        <div class="bar" style="margin-bottom:14px"><i style="width:${total ? Math.min(100, (paid / total) * 100) : 0}%;background:var(--sage)"></i></div>
+        ${commits.length ? timelineHtml(ui.month, commits) : '<div class="empty">Tiada komitmen aktif bulan ni.</div>'}
       </div>
       <div class="section">
         <div class="section-head"><h2>Bajet kategori</h2><button class="link-btn" data-act="manage-budget">Ubah</button></div>
@@ -504,11 +587,12 @@
     const editing = opts.tx || null;
     if (editing && editing.type === 'adjust') return openAdjustInfo(editing);
     const firstDebit = accounts().find((a) => a.group === 'debit');
+    const firstCard = accounts().find((a) => a.type === 'card');
     const st = {
       type: editing ? editing.type : (opts.type || 'expense'),
       amount: editing ? String(round2(num(editing.amount))) : (opts.amount ? String(opts.amount) : ''),
       category_id: editing ? editing.category_id : (opts.category_id || ''),
-      account_id: editing ? editing.account_id : (opts.account_id || (idx.acc[ui.lastAccount] && ui.lastAccount) || (firstDebit && firstDebit.id) || ''),
+      account_id: editing ? editing.account_id : (opts.account_id || (idx.acc[ui.lastAccount] && ui.lastAccount) || (firstCard && firstCard.id) || (firstDebit && firstDebit.id) || ''),
       to_account_id: editing ? editing.to_account_id : (opts.to_account_id || ''),
       date: editing ? String(editing.date) : (opts.date || todayStr()),
       note: editing ? editing.note : (opts.note || ''),
@@ -526,7 +610,7 @@
       : `<div class="field-label"><span>Kategori</span></div><div class="chips">${catChips()}</div>
          <div class="field-label"><span>${st.type === 'income' ? 'Masuk ke' : 'Bayar guna'}</span></div><div class="chips">${accChips('account_id')}</div>`;
 
-    const html = `${sheetHead(editing ? 'Edit transaksi' : (st.commitment_id ? 'Bayar komitmen' : 'Transaksi baru'))}
+    const html = `${sheetHead(editing ? 'Edit transaksi' : (st.commitment_id ? (st.type === 'income' ? 'Rekod pendapatan' : 'Rekod bayaran') : 'Transaksi baru'))}
       <div class="seg" role="tablist">
         ${['expense', 'income', 'transfer'].map((t) => `<button data-v="${t}" class="${st.type === t ? 'on' : ''}">${TX_LABEL[t]}</button>`).join('')}
       </div>
@@ -705,13 +789,19 @@
     });
   }
 
+
   function openCommitManager() {
-    const list = (data.commitments || []).slice().sort((a, b) => (b.active !== false) - (a.active !== false) || num(a.due_day || 99) - num(b.due_day || 99));
+    const list = (data.commitments || []).slice().sort((a, b) => (b.active !== false) - (a.active !== false) || (num(a.due_day) || 99) - (num(b.due_day) || 99));
+    const bal = balances();
     openSheet(`${sheetHead('Urus komitmen')}
-      <div class="list">${list.map((c) => `<button class="row" data-cid="${esc(c.id)}">
-        <span class="row-ico">${esc((idx.cat[c.category_id] || {}).icon || '📌')}</span>
-        <span class="row-main"><span class="t">${esc(c.name)}</span><span class="s">${c.active === false ? 'Tak aktif' : (c.due_day ? `${c.due_day} hb` : 'Tiada tarikh')}${c.end_month ? ` · tamat ${esc(c.end_month)}` : ''}</span></span>
-        <span class="row-amt">${money(num(c.amount))}</span></button>`).join('')}</div>
+      <div class="list">${list.map((c) => {
+        const amt = commitAmount(c, bal);
+        const kindLabel = { expense: 'Bayar', transfer: 'Pindah', income: 'Masuk' }[commitKind(c)];
+        return `<button class="row" data-cid="${esc(c.id)}">
+        <span class="row-ico">${esc(commitKind(c) === 'transfer' ? '⇄' : (idx.cat[c.category_id] || {}).icon || '📌')}</span>
+        <span class="row-main"><span class="t">${esc(c.name)}</span><span class="s">${kindLabel} · ${c.active === false ? 'Tak aktif' : (c.due_day ? `${c.due_day} hb` : 'Tiada tarikh')}${c.end_month ? ` · tamat ${esc(c.end_month)}` : ''}</span></span>
+        <span class="row-amt">${amt === null ? '<span class="faint">Ikut jumlah</span>' : money(amt)}</span></button>`;
+      }).join('')}</div>
       <div class="btn-row one"><button class="btn" id="cNew">Tambah komitmen</button></div>`, (sh) => {
       sh.addEventListener('click', (e) => {
         const r = e.target.closest('[data-cid]');
@@ -721,18 +811,26 @@
     });
   }
 
+
   function openCommitForm(c) {
     const isNew = !c;
-    c = c || { id: uid('com'), name: '', amount: '', due_day: '', category_id: '', account_id: '', start_month: '', end_month: '', active: true, note: '' };
-    const catOpts = categories('expense').map((x) => `<option value="${x.id}" ${c.category_id === x.id ? 'selected' : ''}>${esc(x.icon + ' ' + x.name)}</option>`).join('');
-    const accOpts = `<option value="">Tiada (pilih masa bayar)</option>` + accounts().map((x) => `<option value="${x.id}" ${c.account_id === x.id ? 'selected' : ''}>${esc(x.name)}</option>`).join('');
+    c = c || { id: uid('com'), name: '', amount: '', due_day: '', category_id: '', account_id: '', start_month: '', end_month: '', active: true, note: '', kind: 'expense', to_account_id: '' };
+    const kind = commitKind(c);
+    const accOpts = (sel) => `<option value="">Tiada</option>` + accounts().map((x) => `<option value="${x.id}" ${sel === x.id ? 'selected' : ''}>${esc(x.name)}</option>`).join('');
+    const catOpts = (k) => categories(k).map((x) => `<option value="${x.id}" ${c.category_id === x.id ? 'selected' : ''}>${esc(x.icon + ' ' + x.name)}</option>`).join('');
     openSheet(`${sheetHead(isNew ? 'Komitmen baru' : 'Edit komitmen')}
       <div class="form-grid">
         <label>Nama<input class="input" id="kName" value="${esc(c.name)}" maxlength="60"></label>
-        <label>Jumlah sebulan (RM)<input class="input" id="kAmt" inputmode="decimal" value="${esc(c.amount === null ? '' : c.amount)}"></label>
-        <label>Hari jatuh tempo (1 hingga 31, pilihan)<input class="input" id="kDay" inputmode="numeric" value="${esc(c.due_day === null ? '' : c.due_day)}"></label>
-        <label>Kategori<select class="input" id="kCat">${catOpts}</select></label>
-        <label>Akaun biasa guna<select class="input" id="kAcc">${accOpts}</select></label>
+        <label>Jenis<select class="input" id="kKind">
+          <option value="expense" ${kind === 'expense' ? 'selected' : ''}>Bayaran (loan, bil, langganan)</option>
+          <option value="transfer" ${kind === 'transfer' ? 'selected' : ''}>Pindah / bayar hutang kad atau PayLater</option>
+          <option value="income" ${kind === 'income' ? 'selected' : ''}>Pendapatan (gaji)</option>
+        </select></label>
+        <label>Jumlah sebulan (RM)<input class="input" id="kAmt" inputmode="decimal" value="${esc(c.amount === null ? '' : c.amount)}" placeholder="Kosong = ikut hutang semasa / berubah"></label>
+        <label>Hari bulan (1 hingga 31)<input class="input" id="kDay" inputmode="numeric" value="${esc(c.due_day === null ? '' : c.due_day)}"></label>
+        <label id="kFromL"><span id="kFromT">Akaun</span><select class="input" id="kAcc">${accOpts(c.account_id)}</select></label>
+        <label id="kToL">Ke akaun<select class="input" id="kTo">${accOpts(c.to_account_id)}</select></label>
+        <label id="kCatL">Kategori<select class="input" id="kCat"></select></label>
         <label>Bulan mula (pilihan)<input class="input" id="kStart" type="month" value="${esc(c.start_month)}"></label>
         <label>Bulan akhir (pilihan, contoh ansuran)<input class="input" id="kEnd" type="month" value="${esc(c.end_month)}"></label>
       </div>
@@ -740,14 +838,30 @@
         ${isNew ? '' : `<button class="btn danger" id="kToggle">${c.active === false ? 'Aktifkan' : 'Hentikan'}</button>`}
         <button class="btn" id="kSave">Simpan</button>
       </div>`, (sh) => {
+      const sync = () => {
+        const k = $('#kKind', sh).value;
+        $('#kToL', sh).style.display = k === 'transfer' ? '' : 'none';
+        $('#kCatL', sh).style.display = k === 'transfer' ? 'none' : '';
+        $('#kFromT', sh).textContent = k === 'transfer' ? 'Dari akaun' : k === 'income' ? 'Masuk ke akaun' : 'Bayar guna akaun';
+        const want = k === 'income' ? 'income' : 'expense';
+        const cat = $('#kCat', sh);
+        if (cat.dataset.k !== want) { cat.innerHTML = catOpts(want); cat.dataset.k = want; }
+      };
+      $('#kKind', sh).onchange = sync;
+      sync();
       $('#kSave', sh).onclick = () => {
         const name = $('#kName', sh).value.trim();
-        const amount = round2(num($('#kAmt', sh).value.replace(/[^0-9.]/g, '')));
-        if (!name || !(amount > 0)) return toast('Isi nama dan jumlah');
+        const k = $('#kKind', sh).value;
+        const raw = $('#kAmt', sh).value.replace(/[^0-9.]/g, '');
+        const amount = raw === '' ? '' : round2(num(raw));
+        if (!name) return toast('Isi nama');
+        if (k === 'transfer' && !$('#kTo', sh).value) return toast('Pilih akaun tujuan');
         const day = parseInt($('#kDay', sh).value, 10);
         const row = Object.assign({}, c, {
-          name, amount, due_day: day >= 1 && day <= 31 ? day : '', category_id: $('#kCat', sh).value,
-          account_id: $('#kAcc', sh).value, start_month: $('#kStart', sh).value, end_month: $('#kEnd', sh).value
+          name, kind: k, amount, due_day: day >= 1 && day <= 31 ? day : '',
+          category_id: k === 'transfer' ? '' : $('#kCat', sh).value,
+          account_id: $('#kAcc', sh).value, to_account_id: k === 'transfer' ? $('#kTo', sh).value : '',
+          start_month: $('#kStart', sh).value, end_month: $('#kEnd', sh).value
         });
         closeSheet();
         commit([{ op: 'upsert', tab: 'Commitments', row }], 'Komitmen disimpan');
@@ -842,7 +956,13 @@
       if (c) {
         const now = todayStr();
         const date = now.slice(0, 7) === ui.month ? now : `${ui.month}-${String(Math.min(num(c.due_day) || 1, 28)).padStart(2, '0')}`;
-        openTxSheet({ type: 'expense', amount: num(c.amount), category_id: c.category_id, account_id: c.account_id || undefined, note: c.name, commitment_id: c.id, date });
+        const amt = commitAmount(c);
+        const kind = commitKind(c);
+        openTxSheet({
+          type: kind, amount: amt || '', category_id: kind === 'transfer' ? '' : c.category_id,
+          account_id: c.account_id || undefined, to_account_id: kind === 'transfer' ? c.to_account_id : '',
+          note: c.name, commitment_id: c.id, date
+        });
       }
     }
     else if (act === 'acc') { const acc = idx.acc[a.dataset.id]; if (acc) openAccountSheet(acc); }
@@ -889,15 +1009,19 @@
       ['acc_asb', 'ASB', 'invest', 'invest', 6200, '', '#2B4BA0'], ['acc_epf', 'KWSP', 'invest', 'invest', 24800, '', '#A07C2C']
     ].map((a, i) => ({ id: a[0], name: a[1], type: a[2], group: a[3], last4: '', opening_balance: a[4], credit_limit: a[5], color: a[6], order: i + 1, archived: false, note: '' }));
     const coms = [
-      ['com_car', 'Ansuran kereta', 520, 5, 'cat_loan', 'acc_bank'], ['com_net', 'Internet rumah', 99, 10, 'cat_telco', 'acc_bank'],
-      ['com_tnb', 'Bil elektrik', 160, 15, 'cat_elektrik', 'acc_bank'], ['com_ph', 'Pelan telefon', 45, 20, 'cat_telco', 'acc_cc'],
-      ['com_str', 'Langganan streaming', 25, 25, 'cat_sub', 'acc_cc']
-    ].map((c) => ({ id: c[0], name: c[1], amount: c[2], due_day: c[3], category_id: c[4], account_id: c[5], start_month: '', end_month: '', active: true, note: '' }));
+      ['com_salary', 'Gaji masuk', '', 1, 'cat_gaji', 'acc_bank', 'income', ''],
+      ['com_car', 'Ansuran kereta', 520, 5, 'cat_loan', 'acc_bank', 'expense', ''],
+      ['com_net', 'Internet rumah', 99, 10, 'cat_telco', 'acc_bank', 'expense', ''],
+      ['com_tnb', 'Bil elektrik', 160, 15, 'cat_elektrik', 'acc_bank', 'expense', ''],
+      ['com_pl', 'Bayar PayLater', '', 20, '', 'acc_cc', 'transfer', 'acc_pl'],
+      ['com_cc', 'Bayar kad kredit', '', 25, '', 'acc_bank', 'transfer', 'acc_cc'],
+      ['com_str', 'Langganan streaming', 25, '', 'cat_sub', 'acc_cc', 'expense', '']
+    ].map((c) => ({ id: c[0], name: c[1], amount: c[2], due_day: c[3], category_id: c[4], account_id: c[5], start_month: '', end_month: '', active: true, note: '', kind: c[6], to_account_id: c[7] }));
     const tx = [];
     const add = (date, type, amount, account_id, category_id, note, extra) => tx.push(Object.assign({ id: uid('tx'), date, type, amount, account_id, to_account_id: '', category_id, commitment_id: '', note, source: 'demo', created_at: date + 'T09:00:00' }, extra || {}));
     const today = Math.max(1, Number(todayStr().slice(8, 10)));
     [[pm, 28], [m, Math.min(today, 28)]].forEach(([mm, last], k) => {
-      add(d(mm, 1), 'income', 3800, 'acc_bank', 'cat_gaji', 'Gaji');
+      add(d(mm, 1), 'income', 3800, 'acc_bank', 'cat_gaji', 'Gaji', { commitment_id: 'com_salary' });
       if (last >= 5) add(d(mm, 5), 'expense', 520, 'acc_bank', 'cat_loan', 'Ansuran kereta', { commitment_id: 'com_car' });
       if (last >= 10) add(d(mm, 10), 'expense', 99, 'acc_bank', 'cat_telco', 'Internet rumah', { commitment_id: 'com_net' });
       if (last >= 6) add(d(mm, 6), 'expense', 186.4, 'acc_cc', 'cat_dapur', 'Pasar raya');
