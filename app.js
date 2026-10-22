@@ -2,7 +2,7 @@
 (() => {
   'use strict';
 
-  const VERSION = '2.1.0';
+  const VERSION = '2.2.0';
   const LS = { cfg: 'kk_cfg', data: 'kk_data', queue: 'kk_queue', ui: 'kk_ui' };
   const EXP_GROUPS = [
     ['Fixed', '🏛️'], ['Household', '🏠'], ['Telco', '📱'], ['Transport', '🚗'],
@@ -94,12 +94,21 @@
 
   function balances() {
     const b = {};
+    const loanCommit = {};
+    (data.commitments || []).forEach((c) => {
+      if (commitKind(c) === 'expense' && c.to_account_id && (idx.acc[c.to_account_id] || {}).group === 'borrowed') loanCommit[c.id] = c.to_account_id;
+    });
     (data.accounts || []).forEach((a) => { b[a.id] = num(a.opening_balance); });
     (data.transactions || []).forEach((t) => {
       if (!countsForBalance(t)) return;
       const amt = num(t.amount);
       if (t.type === 'income') b[t.account_id] = (b[t.account_id] || 0) + amt;
-      else if (t.type === 'expense') b[t.account_id] = (b[t.account_id] || 0) - amt;
+      else if (t.type === 'expense') {
+        b[t.account_id] = (b[t.account_id] || 0) - amt;
+        // An instalment paid as an expense also brings down the loan it is linked to.
+        const lc = t.commitment_id && loanCommit[t.commitment_id];
+        if (lc) b[lc] = (b[lc] || 0) + amt;
+      }
       else if (t.type === 'adjust') b[t.account_id] = (b[t.account_id] || 0) + amt;
       else if (t.type === 'transfer') {
         b[t.account_id] = (b[t.account_id] || 0) - amt;
@@ -478,9 +487,18 @@
       if (tx || (due && day >= due)) { paid += 1; thisMonth = true; }
     }
     paid = Math.min(total, paid);
-    const left = total - paid;
+    let left = total - paid, owedReal = null, finish = end;
+    // Linked loan account: the real balance wins over the schedule (rescheduled loans drift from it).
+    const loan = c.to_account_id && idx.acc[c.to_account_id];
+    if (loan && loan.group === 'borrowed') {
+      owedReal = Math.max(0, -(balances()[loan.id] || 0));
+      left = Math.ceil(owedReal / amt - 0.001);
+      paid = Math.max(0, total - left);
+      const from = thisMonth || cur < start ? shiftMonth(cur < start ? start : cur, cur < start ? 0 : 1) : cur;
+      finish = left ? shiftMonth(from, left - 1) : cur;
+    }
     const nextMonth = left ? (thisMonth || cur < start ? shiftMonth(cur < start ? start : cur, cur < start ? 0 : 1) : cur) : null;
-    return { c, start, end, amt, total, paid, left, pct: (paid / total) * 100, owed: round2(left * amt), done: round2(paid * amt), nextMonth, due };
+    return { c, start, end, finish, amt, total, paid, left, pct: (paid / total) * 100, owed: owedReal !== null ? round2(owedReal) : round2(left * amt), done: round2(paid * amt), nextMonth, due, real: owedReal !== null };
   }
   function spanLabel(n) {
     const y = Math.floor(n / 12), mo = n % 12;
@@ -498,13 +516,13 @@
         const next = x.nextMonth ? `${x.due ? `${x.due} ` : ''}${MON_S[nm - 1]} ${ny}` : '';
         return `<div class="goal loan-card">
           <div class="goal-top"><h4>${esc(x.c.name)}</h4><span class="status good">${x.pct < 10 ? x.pct.toFixed(1) : Math.round(x.pct)}%</span></div>
-          <div class="loan-fig"><span class="big money">${fmt(x.owed)}</span><span class="loan-of">baki · ${x.left} bulan lagi</span></div>
+          <div class="loan-fig"><span class="big money">${fmt(x.owed)}</span><span class="loan-of">${x.real ? 'baki akaun' : 'baki'} · ${x.left} bulan lagi</span></div>
           <div class="bar ok"><i style="width:${Math.min(100, x.pct)}%"></i></div>
           <div class="progress-line" style="margin:0"><span><b>${x.paid}</b>/${x.total} bulan dibayar</span><span>${money(x.amt)}/bulan</span></div>
           <div class="loan-stats">
             <div><small>Dah bayar</small><b class="money">${fmt(x.done)}</b></div>
             <div><small>Bayaran seterusnya</small><b>${esc(next)}</b></div>
-            <div><small>Tamat</small><b>${esc(monthLabel(x.end))}</b><small>${spanLabel(x.left)} lagi</small></div>
+            <div><small>${x.real && x.finish !== x.end ? 'Jangkaan tamat' : 'Tamat'}</small><b>${esc(monthLabel(x.finish))}</b><small>${x.real && x.finish !== x.end ? `Rasmi ${esc(monthLabel(x.end))}` : `${spanLabel(x.left)} lagi`}</small></div>
           </div>
         </div>`;
       }).join('')}</div>
