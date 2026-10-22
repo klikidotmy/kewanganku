@@ -2,7 +2,7 @@
 (() => {
   'use strict';
 
-  const VERSION = '1.1.0';
+  const VERSION = '1.1.1';
   const LS = { cfg: 'kk_cfg', data: 'kk_data', queue: 'kk_queue', ui: 'kk_ui' };
   const EXP_GROUPS = [
     ['Fixed', '🏛️'], ['Household', '🏠'], ['Telco', '📱'], ['Transport', '🚗'],
@@ -152,7 +152,7 @@
     if (m > cur) return { k: 'upcoming', label: due ? `${due} hb` : 'Tiada tarikh' };
     if (!due) return { k: 'nodate', label: 'Tiada tarikh' };
     const day = Number(todayStr().slice(8, 10));
-    if (due < day) return { k: 'overdue', label: `Lewat ${day - due} hari` };
+    if (due < day) return { k: 'overdue', label: commitKind(x.c) === 'income' ? 'Belum direkod' : `Lewat ${day - due} hari` };
     if (due === day) return { k: 'today', label: 'Hari ni' };
     return { k: 'upcoming', label: due - day === 1 ? 'Esok' : `${due - day} hari lagi` };
   }
