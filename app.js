@@ -2,7 +2,7 @@
 (() => {
   'use strict';
 
-  const VERSION = '2.0.0';
+  const VERSION = '2.0.1';
   const LS = { cfg: 'kk_cfg', data: 'kk_data', queue: 'kk_queue', ui: 'kk_ui' };
   const EXP_GROUPS = [
     ['Fixed', '🏛️'], ['Household', '🏠'], ['Telco', '📱'], ['Transport', '🚗'],
@@ -246,7 +246,16 @@
   const INCOME_COLORS = ['#4D8BFF', '#45C987', '#A78BFA', '#F2B14C', '#2EC4D6', '#F08A50', '#9AA4B8'];
   const TITLES = { home: 'Ringkasan', trend: 'Trend', plan: 'Bajet', tx: 'Transaksi', accounts: 'Akaun' };
   const isCurMonth = (m) => m === todayStr().slice(0, 7);
-  const monthHasData = (m) => (data.transactions || []).some((t) => String(t.date).slice(0, 7) === m);
+  /* A month counts as having data only when transactions span most of it; partial months are not used for comparisons. */
+  function monthHasData(m) {
+    const ds = (data.transactions || []).map((t) => String(t.date)).filter((d) => d.slice(0, 7) === m).sort();
+    if (!ds.length) return false;
+    if (isCurMonth(m)) return true;
+    const [y, mo] = m.split('-').map(Number);
+    const dim = new Date(y, mo, 0).getDate();
+    const span = Number(ds[ds.length - 1].slice(8, 10)) - Number(ds[0].slice(8, 10)) + 1;
+    return span / dim >= 0.6;
+  }
   const shortMonth = (m) => MON_S[Number(m.slice(5, 7)) - 1];
   const fmtShort = (n) => { const a = Math.abs(n); const s = n < 0 ? '-' : ''; return a >= 1000 ? `${s}RM${(a / 1000).toFixed(a >= 10000 ? 0 : 1)}k` : `${s}RM${Math.round(a)}`; };
   const setting = (k, d) => { const v = data.settings && data.settings[k]; return v === undefined || v === null || v === '' ? d : v; };
@@ -542,7 +551,7 @@
           <div class="chips-row">${best ? `<span class="stat-chip">Terbaik <b>${shortMonth(best.m)}</b> <span class="money">${fmtShort(best.net)}</span></span>` : ''}<span class="stat-chip">Purata keluar <b class="money">${fmtShort(avg('expense'))}</b></span></div></div>
         <div class="legend"><span><i style="background:#4D8BFF"></i>Masuk</span><span><i style="background:#F08A50"></i>Keluar</span></div>
         ${barChart(ser.map((x) => ({ label: shortMonth(x.m), cur: x.m === ui.month, has: x.has, groups: [[{ v: x.income, color: '#4D8BFF', name: 'masuk' }], [{ v: x.expense, color: '#F08A50', name: 'keluar' }]] })), { label: 'Masuk vs keluar ikut bulan' })}
-        <div class="chart-note">Kotak putus-putus = bulan tiada data lagi, bukan sifar. Upload penyata untuk isi.</div>
+        <div class="chart-note">Kotak putus-putus = bulan tiada data lengkap (bukan sifar). Upload penyata bulan tu untuk isi.</div>
       </div></div>
 
       <div class="grid-2">
