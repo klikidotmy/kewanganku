@@ -2,7 +2,7 @@
 (() => {
   'use strict';
 
-  const VERSION = '2.2.0';
+  const VERSION = '2.2.1';
   const LS = { cfg: 'kk_cfg', data: 'kk_data', queue: 'kk_queue', ui: 'kk_ui' };
   const EXP_GROUPS = [
     ['Fixed', '🏛️'], ['Household', '🏠'], ['Telco', '📱'], ['Transport', '🚗'],
@@ -492,7 +492,7 @@
     const loan = c.to_account_id && idx.acc[c.to_account_id];
     if (loan && loan.group === 'borrowed') {
       owedReal = Math.max(0, -(balances()[loan.id] || 0));
-      left = Math.ceil(owedReal / amt - 0.001);
+      left = Math.max(0, Math.ceil((owedReal - 1) / amt)); // sen-level leftovers (e.g. RM0.84) are not an extra month
       paid = Math.max(0, total - left);
       const from = thisMonth || cur < start ? shiftMonth(cur < start ? start : cur, cur < start ? 0 : 1) : cur;
       finish = left ? shiftMonth(from, left - 1) : cur;
