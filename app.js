@@ -2,7 +2,7 @@
 (() => {
   'use strict';
 
-  const VERSION = '2.0.1';
+  const VERSION = '2.1.0';
   const LS = { cfg: 'kk_cfg', data: 'kk_data', queue: 'kk_queue', ui: 'kk_ui' };
   const EXP_GROUPS = [
     ['Fixed', '🏛️'], ['Household', '🏠'], ['Telco', '📱'], ['Transport', '🚗'],
@@ -415,6 +415,8 @@
         ${creditPanel(b)}
       </div>
 
+      ${installmentsPanel()}
+
       <div class="grid-2">
         <div class="section">
           ${sectionHead('Belanja', 'Ikut kumpulan', 'Garis kecil = bajet kumpulan', `<span class="aside">${money(s.expense)}</span>`)}
@@ -455,6 +457,57 @@
           <span class="row-amt neg">${money(owed)}</span>
         </button>`;
       }).join('')}</div>` : '<div class="empty">Tiada hutang kad atau PayLater.</div>'}
+    </div>`;
+  }
+
+  /* Instalment progress: any active expense commitment with both start_month and end_month. */
+  const monthsBetween = (a, b) => { const [ay, am] = a.split('-').map(Number); const [by, bm] = b.split('-').map(Number); return (by - ay) * 12 + (bm - am); };
+  function installmentOf(c) {
+    const start = String(c.start_month || '').slice(0, 7), end = String(c.end_month || '').slice(0, 7);
+    const amt = num(c.amount);
+    if (!/^\d{4}-\d{2}$/.test(start) || !/^\d{4}-\d{2}$/.test(end) || !amt || end < start) return null;
+    const total = monthsBetween(start, end) + 1;
+    const cur = todayStr().slice(0, 7);
+    const day = Number(todayStr().slice(8, 10));
+    const due = num(c.due_day);
+    // Months before this one are treated as paid (auto debit). This month counts once recorded or once the due day has passed.
+    let paid = Math.max(0, Math.min(total, monthsBetween(start, cur)));
+    let thisMonth = false;
+    if (cur >= start && cur <= end) {
+      const tx = (data.transactions || []).some((t) => t.commitment_id === c.id && String(t.date).slice(0, 7) === cur);
+      if (tx || (due && day >= due)) { paid += 1; thisMonth = true; }
+    }
+    paid = Math.min(total, paid);
+    const left = total - paid;
+    const nextMonth = left ? (thisMonth || cur < start ? shiftMonth(cur < start ? start : cur, cur < start ? 0 : 1) : cur) : null;
+    return { c, start, end, amt, total, paid, left, pct: (paid / total) * 100, owed: round2(left * amt), done: round2(paid * amt), nextMonth, due };
+  }
+  function spanLabel(n) {
+    const y = Math.floor(n / 12), mo = n % 12;
+    return [y ? `${y} thn` : '', mo ? `${mo} bln` : ''].filter(Boolean).join(' ') || '0 bln';
+  }
+  function installmentsPanel() {
+    const list = (data.commitments || []).filter((c) => c.active !== false && commitKind(c) === 'expense')
+      .map(installmentOf).filter(Boolean).filter((x) => x.left > 0).sort((a, b) => b.owed - a.owed);
+    if (!list.length) return '';
+    const total = list.reduce((n, x) => n + x.owed, 0);
+    return `<div class="section">
+      ${sectionHead('Ansuran', 'Progress pinjaman', 'Dikira ikut jadual ansuran', `<span class="aside neg money">${fmt(total)}</span>`)}
+      <div class="goals">${list.map((x) => {
+        const [ny, nm] = x.nextMonth ? x.nextMonth.split('-').map(Number) : [0, 0];
+        const next = x.nextMonth ? `${x.due ? `${x.due} ` : ''}${MON_S[nm - 1]} ${ny}` : '';
+        return `<div class="goal loan-card">
+          <div class="goal-top"><h4>${esc(x.c.name)}</h4><span class="status good">${x.pct < 10 ? x.pct.toFixed(1) : Math.round(x.pct)}%</span></div>
+          <div class="loan-fig"><span class="big money">${fmt(x.owed)}</span><span class="loan-of">baki · ${x.left} bulan lagi</span></div>
+          <div class="bar ok"><i style="width:${Math.min(100, x.pct)}%"></i></div>
+          <div class="progress-line" style="margin:0"><span><b>${x.paid}</b>/${x.total} bulan dibayar</span><span>${money(x.amt)}/bulan</span></div>
+          <div class="loan-stats">
+            <div><small>Dah bayar</small><b class="money">${fmt(x.done)}</b></div>
+            <div><small>Bayaran seterusnya</small><b>${esc(next)}</b></div>
+            <div><small>Tamat</small><b>${esc(monthLabel(x.end))}</b><small>${spanLabel(x.left)} lagi</small></div>
+          </div>
+        </div>`;
+      }).join('')}</div>
     </div>`;
   }
 
