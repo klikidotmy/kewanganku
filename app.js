@@ -1,8 +1,8 @@
-/* KewanganKu: personal finance PWA backed by a Google Sheet through Apps Script. */
+/* baki. (repo: kewanganku): personal finance PWA backed by a Google Sheet through Apps Script. */
 (() => {
   'use strict';
 
-  const VERSION = '2.5.0';
+  const VERSION = '2.6.0';
   const LS = { cfg: 'kk_cfg', data: 'kk_data', queue: 'kk_queue', ui: 'kk_ui' };
   const EXP_GROUPS = [
     ['Fixed', '🏛️'], ['Household', '🏠'], ['Telco', '📱'], ['Transport', '🚗'],
@@ -330,12 +330,12 @@
     const good = up === upIsGood;
     return `<span class="pill ${onHero ? '' : (good ? 'good' : 'bad')}">${up ? '▲' : '▼'} ${Math.abs(pct).toFixed(0)}%</span>`;
   }
-  function ring(pct, color, track) {
-    const p = Math.max(0, Math.min(100, pct || 0));
-    const r = 24, c = 2 * Math.PI * r;
-    return `<div class="ring"><svg viewBox="0 0 58 58"><circle cx="29" cy="29" r="${r}" fill="none" stroke="${track || 'rgba(255,255,255,.18)'}" stroke-width="6"/>
-      <circle cx="29" cy="29" r="${r}" fill="none" stroke="${color || '#fff'}" stroke-width="6" stroke-linecap="round" stroke-dasharray="${(c * p) / 100} ${c}" transform="rotate(-90 29 29)"/></svg>
-      <b>${Math.round(pct || 0)}%</b></div>`;
+  // Spend vs budget with a marker where spending should be by today; amber when running ahead, red when over.
+  function paceBar(spent, budget, frac) {
+    const pct = budget ? Math.min(100, (spent / budget) * 100) : 0;
+    const mark = Math.min(100, Math.max(0, frac * 100));
+    const state = budget && spent > budget ? 'over' : budget && spent > budget * frac * 1.05 ? 'ahead' : '';
+    return `<div class="pace ${state}" role="img" aria-label="Belanja ${Math.round(pct)}% bajet, sepatutnya ${Math.round(mark)}% setakat hari ni"><i style="width:${pct}%"></i><u style="left:${mark}%"></u></div>`;
   }
   function sparkline(vals, color) {
     const pts = vals.map((v, i) => ({ v, i })).filter((p) => p.v !== null);
@@ -391,7 +391,7 @@
     $('#privacyBtn').innerHTML = icon(ui.private ? 'eyeOff' : 'eye');
     const view = $('#view');
     const app = $('#app');
-    if (!cfg || !data) { app.classList.add('setup-mode'); $('#pageTitle').textContent = 'KewanganKu'; view.innerHTML = setupView(); bindSetup(); return; }
+    if (!cfg || !data) { app.classList.add('setup-mode'); $('#pageTitle').textContent = 'baki.'; view.innerHTML = setupView(); bindSetup(); return; }
     app.classList.remove('setup-mode');
     if (!TITLES[ui.tab]) ui.tab = 'home';
     document.querySelectorAll('.tab').forEach((b) => b.classList.toggle('active', b.dataset.tab === ui.tab));
@@ -439,7 +439,8 @@
         </div>
         <div class="kpi-grid">
           <div class="kpi wide"><div class="kpi-row"><div style="flex:1;min-width:0"><div class="kpi-label">Belanja</div><div class="kpi-value money">${fmt(s.expense)}</div></div>
-            ${ring(budgetTotal ? (s.expense / budgetTotal) * 100 : 0, s.expense > budgetTotal ? '#F2696D' : '#fff')}</div>
+            <span class="pace-pct">${budgetTotal ? Math.round((s.expense / budgetTotal) * 100) : 0}%</span></div>
+            ${paceBar(s.expense, budgetTotal, cur ? day / dim : 1)}
             <div class="kpi-sub">/ ${money(budgetTotal)} bajet ${pHas ? deltaPill(s.expense, p.expense, false, true) : ''}</div>
             <div class="kpi-foot">${remain >= 0 ? `Baki bajet ${money(remain)}${cur ? ` · boleh ${money(perDay)}/hari` : ''}` : `Lebih bajet ${money(-remain)}`}</div></div>
           <div class="kpi"><div class="kpi-label">Masuk</div><div class="kpi-value money">${fmt(s.income)}</div>
@@ -1262,7 +1263,7 @@
         <button class="btn ghost" id="sDisc">${demo ? 'Keluar mod demo' : 'Tukar sambungan'}</button>
       </div>
       <p class="hint">Tarikh mula baki: ${esc(openingDate() || 'tiada')}. Transaksi sebelum tarikh ni disimpan sebagai sejarah dan tak ubah baki akaun.</p>
-      <p class="hint">KewanganKu v${VERSION}</p>`, (sh) => {
+      <p class="hint">baki. v${VERSION}</p>`, (sh) => {
       const s = $('#sSync', sh);
       if (s) s.onclick = () => { closeSheet(); sync().then(() => toast(syncError ? 'Sync gagal' : 'Sync selesai')); };
       $('#sCsv', sh).onclick = exportCsv;

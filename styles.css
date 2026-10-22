@@ -30,7 +30,7 @@
   --radius-sm: 10px;
   --shadow: 0 1px 2px rgba(11, 21, 48, .04), 0 6px 20px -8px rgba(11, 21, 48, .10);
   --shadow-lg: 0 2px 4px rgba(11, 21, 48, .04), 0 18px 40px -16px rgba(11, 21, 48, .22);
-  --hero: radial-gradient(90% 120% at 100% 0%, rgba(110, 155, 255, .45) 0%, rgba(0, 0, 0, 0) 55%), linear-gradient(140deg, #0A1A47 0%, #0A2E8A 45%, #1565FF 100%);
+  --hero: radial-gradient(90% 120% at 100% 0%, rgba(110, 155, 255, .45) 0%, rgba(0, 0, 0, 0) 55%), linear-gradient(140deg, #0A1A47 0%, #1B3BD8 52%, #5B4DF5 100%);
   --font: "Inter", system-ui, -apple-system, "Segoe UI", sans-serif;
   --safe-b: env(safe-area-inset-bottom, 0px);
   --safe-t: env(safe-area-inset-top, 0px);
@@ -380,3 +380,16 @@ body.private .money { filter: blur(7px); transition: filter .2s; }
 .loan-row .row-main .bar { margin-top: 7px; height: 5px; }
 .loan-row .row-amt .money { font-size: 15px; }
 .loan-row .row-amt small .money { display: inline; font-size: inherit; }
+
+/* v2.6: baki. brand + pace bar */
+.brand-mark { background: linear-gradient(140deg, #1B2A6B 0%, #2447F0 55%, #6A5BFF 100%); }
+.brand-mark svg { width: 72%; height: 72%; }
+.side-logo .brand-mark { background: linear-gradient(140deg, #1B2A6B 0%, #2447F0 55%, #6A5BFF 100%); }
+.brand-dot { font-style: normal; color: #C6F432; }
+#pageTitle { letter-spacing: -.02em; }
+.pace { position: relative; height: 10px; border-radius: 6px; background: rgba(255, 255, 255, .16); margin: 2px 0 2px; }
+.pace i { position: absolute; left: 0; top: 0; bottom: 0; border-radius: 6px; background: #fff; }
+.pace u { position: absolute; top: -4px; bottom: -4px; width: 2px; margin-left: -1px; border-radius: 2px; background: #C6F432; }
+.pace.ahead i { background: #F2B14C; }
+.pace.over i { background: #F2696D; }
+.pace-pct { font-size: 13px; font-weight: 800; padding: 4px 9px; border-radius: 999px; background: rgba(255, 255, 255, .14); }

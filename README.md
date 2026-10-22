@@ -1,4 +1,6 @@
-# KewanganKu
+# baki.
+
+(Repo: kewanganku.)
 
 PWA kewangan peribadi. Data disimpan dalam Google Sheet sendiri melalui Apps Script. Repo ni tak simpan sebarang data kewangan: URL Apps Script dan token disimpan dalam pelayar telefon sahaja.
 
