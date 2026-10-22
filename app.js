@@ -2,7 +2,7 @@
 (() => {
   'use strict';
 
-  const VERSION = '2.3.0';
+  const VERSION = '2.4.0';
   const LS = { cfg: 'kk_cfg', data: 'kk_data', queue: 'kk_queue', ui: 'kk_ui' };
   const EXP_GROUPS = [
     ['Fixed', '🏛️'], ['Household', '🏠'], ['Telco', '📱'], ['Transport', '🚗'],
@@ -68,9 +68,46 @@
   const shiftMonth = (m, d) => { const [y, mo] = m.split('-').map(Number); const dt = new Date(y, mo - 1 + d, 1); return `${dt.getFullYear()}-${String(dt.getMonth() + 1).padStart(2, '0')}`; };
   const dayLabel = (s) => { const [y, m, d] = s.split('-').map(Number); const dt = new Date(y, m - 1, d); return `${DAYS[dt.getDay()]}, ${d} ${MON_S[m - 1]}`; };
   const initials = (name) => String(name).replace(/[^A-Za-z0-9 ]/g, ' ').trim().split(/\s+/).slice(0, 2).map((w) => w[0]).join('').toUpperCase() || '?';
-  // Account avatar: the bank's own site icon when a logo domain is set, initials underneath as the fallback.
-  const logoSrc = (d) => `https://www.google.com/s2/favicons?domain=${encodeURIComponent(String(d).trim())}&sz=128`;
-  const accMono = (a, cls) => `<span class="acc-mono ${cls || ''}" style="--acc:${esc((a && a.color) || '#4D8BFF')}">${a && a.logo ? `<img src="${esc(logoSrc(a.logo))}" alt="" loading="lazy" onerror="this.remove()">` : ''}${esc(initials((a && a.name) || '?'))}</span>`;
+  // Account avatar. logo is either "appstore:<id>" (the app's real App Store icon) or a site domain (its site icon).
+  // Initials sit underneath as the fallback while an icon loads or if it fails.
+  const LS_ICONS = 'kk_icons';
+  let appIcons = load(LS_ICONS, {});
+  let iconFetching = false, iconFailedAt = 0;
+  const appId = (logo) => { const m = String(logo || '').trim().match(/^appstore:(\d+)$/i); return m ? m[1] : ''; };
+  function fetchAppIcons() {
+    if (iconFetching || Date.now() - iconFailedAt < 60000) return; // offline: retry at most once a minute
+    const ids = [...new Set((data && data.accounts || []).map((a) => appId(a.logo)).filter((id) => id && !appIcons[id]))];
+    if (!ids.length) return;
+    iconFetching = true;
+    // The iTunes lookup API is JSONP-only for browsers (no CORS), so load it as a script.
+    const cb = `__kkIcons${Date.now()}`;
+    const sc = document.createElement('script');
+    const done = () => { iconFetching = false; delete window[cb]; sc.remove(); };
+    window[cb] = (res) => {
+      (res && res.results || []).forEach((r) => {
+        const url = r.artworkUrl512 || r.artworkUrl100;
+        if (r.trackId && url) appIcons[String(r.trackId)] = url.replace(/\/\d+x\d+bb\.(png|jpg)$/, '/128x128bb.$1');
+      });
+      ids.forEach((id) => { if (!appIcons[id]) appIcons[id] = 'none'; });
+      save(LS_ICONS, appIcons);
+      done();
+      render();
+    };
+    sc.onerror = () => { iconFailedAt = Date.now(); done(); };
+    sc.src = `https://itunes.apple.com/lookup?id=${ids.join(',')}&country=my&entity=software&callback=${cb}`;
+    document.head.appendChild(sc);
+  }
+  function logoImg(logo) {
+    const id = appId(logo);
+    if (id) {
+      const url = appIcons[id];
+      if (!url) { setTimeout(fetchAppIcons, 0); return ''; }
+      return url === 'none' ? '' : `<img class="app-ico" src="${esc(url)}" alt="" loading="lazy" onerror="this.remove()">`;
+    }
+    const d = String(logo || '').trim();
+    return d ? `<img src="https://www.google.com/s2/favicons?domain=${esc(encodeURIComponent(d))}&sz=128" alt="" loading="lazy" onerror="this.remove()">` : '';
+  }
+  const accMono = (a, cls) => `<span class="acc-mono ${cls || ''}" style="--acc:${esc((a && a.color) || '#4D8BFF')}">${a ? logoImg(a.logo) : ''}${esc(initials((a && a.name) || '?'))}</span>`;
   const $ = (sel, root) => (root || document).querySelector(sel);
 
   let toastTimer;
@@ -1074,7 +1111,7 @@
         <label>${isNew ? 'Baki permulaan (hutang ditulis positif)' : 'Baki permulaan (sejak tarikh mula)'}<input class="input" id="fOpen" inputmode="decimal" value="${esc(Math.abs(num(a.opening_balance)))}"></label>
         <label>Had kredit (kad / PayLater)<input class="input" id="fLimit" inputmode="decimal" value="${esc(a.credit_limit === null ? '' : a.credit_limit)}"></label>
         <label>Warna<input class="input" id="fColor" type="color" value="${esc(a.color || '#D4AE68')}" style="height:46px;padding:4px"></label>
-        <label>Logo (alamat laman, contoh maybank2u.com.my)<input class="input" id="fLogo" value="${esc(a.logo || '')}" placeholder="Kosong = guna huruf" autocapitalize="off" autocorrect="off" spellcheck="false"></label>
+        <label>Logo (appstore:ID dari pautan App Store, atau alamat laman)<input class="input" id="fLogo" value="${esc(a.logo || '')}" placeholder="Kosong = guna huruf" autocapitalize="off" autocorrect="off" spellcheck="false"></label>
         <label>Nota<input class="input" id="fNote" value="${esc(a.note)}" maxlength="120"></label>
       </div>
       ${isNew ? '' : '<p class="hint">Untuk betulkan baki semasa, guna "Kemas kini" pada akaun, bukan baki permulaan.</p>'}
@@ -1092,7 +1129,7 @@
         const row = Object.assign({}, a, {
           name, type, group, last4: $('#fLast4', sh).value.replace(/\D/g, '').slice(0, 4),
           opening_balance: group === 'credit' || group === 'borrowed' ? -open : open,
-          credit_limit: lim === '' ? '' : num(lim), color: $('#fColor', sh).value, logo: $('#fLogo', sh).value.trim().replace(/^https?:\/\//, '').replace(/\/.*$/, ''), note: $('#fNote', sh).value.trim()
+          credit_limit: lim === '' ? '' : num(lim), color: $('#fColor', sh).value, logo: $('#fLogo', sh).value.trim().replace(/^https?:\/\/apps\.apple\.com\/.*?id(\d+).*$/i, 'appstore:$1').replace(/^https?:\/\//, '').replace(/\/.*$/, ''), note: $('#fNote', sh).value.trim()
         });
         closeSheet();
         commit([{ op: 'upsert', tab: 'Accounts', row }], 'Akaun disimpan');
