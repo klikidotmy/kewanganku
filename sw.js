@@ -1,5 +1,5 @@
-const CACHE = 'kewanganku-v2.6.0';
-const SHELL = ['./', 'index.html', 'styles.css', 'app.js', 'manifest.webmanifest', 'icons/icon-192.png', 'icons/icon-512.png', 'icons/apple-touch-icon.png'];
+const CACHE = 'kewanganku-v2.6.1';
+const SHELL = ['./', 'index.html', 'styles.css', 'app.js', 'manifest.webmanifest', 'icons/baki-192.png', 'icons/baki-512.png', 'icons/baki-touch-180.png'];
 
 self.addEventListener('install', (e) => {
   e.waitUntil(caches.open(CACHE).then((c) => c.addAll(SHELL)).then(() => self.skipWaiting()));

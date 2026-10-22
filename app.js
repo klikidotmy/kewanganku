@@ -2,7 +2,7 @@
 (() => {
   'use strict';
 
-  const VERSION = '2.6.0';
+  const VERSION = '2.6.1';
   const LS = { cfg: 'kk_cfg', data: 'kk_data', queue: 'kk_queue', ui: 'kk_ui' };
   const EXP_GROUPS = [
     ['Fixed', '🏛️'], ['Household', '🏠'], ['Telco', '📱'], ['Transport', '🚗'],
