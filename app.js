@@ -2,7 +2,7 @@
 (() => {
   'use strict';
 
-  const VERSION = '2.4.0';
+  const VERSION = '2.5.0';
   const LS = { cfg: 'kk_cfg', data: 'kk_data', queue: 'kk_queue', ui: 'kk_ui' };
   const EXP_GROUPS = [
     ['Fixed', '🏛️'], ['Household', '🏠'], ['Telco', '📱'], ['Transport', '🚗'],
@@ -395,6 +395,7 @@
     app.classList.remove('setup-mode');
     if (!TITLES[ui.tab]) ui.tab = 'home';
     document.querySelectorAll('.tab').forEach((b) => b.classList.toggle('active', b.dataset.tab === ui.tab));
+    app.dataset.tab = ui.tab;
     $('#pageTitle').textContent = TITLES[ui.tab];
     $('#monthLabel').textContent = `${shortMonth(ui.month)} ${ui.month.slice(0, 4)}`;
     const v = { home: homeView, trend: trendView, plan: planView, tx: txView, accounts: accountsView }[ui.tab];
@@ -427,9 +428,6 @@
     const pending = commits.filter((x) => x.status.k !== 'paid');
     const saving = savingsOf(m);
     const recent = monthTx(m).slice(0, 6);
-    const groupMax = Math.max(1, ...EXP_GROUPS.map(([g]) => s.groups[g] || 0));
-    const budgets = {};
-    categories('expense').forEach((c) => { if (num(c.budget)) budgets[c.group] = (budgets[c.group] || 0) + num(c.budget); });
 
     return `
       <section class="hero">
@@ -466,23 +464,10 @@
 
       ${installmentsPanel()}
 
-      <div class="grid-2">
-        <div class="section">
-          ${sectionHead('Belanja', 'Ikut kumpulan', 'Garis kecil = bajet kumpulan', `<span class="aside">${money(s.expense)}</span>`)}
-          <div class="card"><div class="rank">${EXP_GROUPS.map(([g, e]) => {
-            const v = s.groups[g] || 0, bud = budgets[g] || 0, scale = Math.max(groupMax, bud);
-            return `<button class="rank-row" data-act="group" data-g="${esc(g)}">
-              <span class="nm"><span class="sw-dot" style="background:${GROUP_COLORS[g]}"></span><span>${e} ${esc(g)}</span></span>
-              <span class="am money">${fmt(v)}${bud ? `<small>bajet ${fmtShort(bud)}</small>` : ''}</span>
-              <span class="track"><i style="width:${(v / scale) * 100}%;background:${v > bud && bud ? 'var(--bad)' : GROUP_COLORS[g]}"></i>${bud ? `<u style="left:${(bud / scale) * 100}%"></u>` : ''}</span>
-            </button>`;
-          }).join('')}</div></div>
-        </div>
-        <div class="section">
+      <div class="section">
           ${sectionHead('Terkini', 'Transaksi', '', `<button class="link-btn" data-act="tab" data-tab="tx">Semua</button>`)}
           ${recent.length ? `<div class="list">${recent.map(txRow).join('')}</div>`
             : `<div class="empty">Tiada transaksi untuk ${esc(monthLabel(m))}.<br><button class="btn" data-act="add" style="width:auto;display:inline-flex;padding:10px 18px">Tambah transaksi</button></div>`}
-        </div>
       </div>`;
   }
 
@@ -494,7 +479,7 @@
     const active = list.filter((a) => owedOf(a) > 0.004).sort((x, y) => owedOf(y) - owedOf(x));
     const clear = list.length - active.length;
     return `<div class="section">
-      ${sectionHead('Hutang', 'Kad & PayLater', clear ? `${clear} akaun tiada hutang` : '', `<span class="aside neg money">${fmt(total)}</span>`)}
+      ${sectionHead('Hutang', 'Kad & PayLater', clear ? `${clear} akaun kosong` : '', `<span class="aside money">${fmt(total)}</span>`)}
       ${active.length ? `<div class="list">${active.map((a) => {
         const owed = owedOf(a), lim = num(a.credit_limit);
         const pct = lim ? Math.min(100, (owed / lim) * 100) : 0;
@@ -503,7 +488,7 @@
           <span class="row-main"><span class="t">${esc(a.name)}</span>
             <span class="s">${lim ? `Baki had ${money(lim - owed)} · ${Math.round(pct)}%` : 'Hutang'}</span>
             ${lim ? `<span class="bar ${pct >= 80 ? 'over' : ''}"><i style="width:${pct}%"></i></span>` : ''}</span>
-          <span class="row-amt neg">${money(owed)}</span>
+          <span class="row-amt">${money(owed)}</span>
         </button>`;
       }).join('')}</div>` : '<div class="empty">Tiada hutang kad atau PayLater.</div>'}
     </div>`;
@@ -550,20 +535,18 @@
     if (!list.length) return '';
     const total = list.reduce((n, x) => n + x.owed, 0);
     return `<div class="section">
-      ${sectionHead('Ansuran', 'Progress pinjaman', 'Baki sebenar akaun, atau ikut jadual', `<span class="aside neg money">${fmt(total)}</span>`)}
-      <div class="goals">${list.map((x) => {
+      ${sectionHead('Ansuran', 'Progress pinjaman', '', `<span class="aside money">${fmt(total)}</span>`)}
+      <div class="list loan-list">${list.map((x) => {
+        const acc = idx.acc[x.c.to_account_id] && idx.acc[x.c.to_account_id].logo ? idx.acc[x.c.to_account_id] : idx.acc[x.c.account_id];
         const [ny, nm] = x.nextMonth ? x.nextMonth.split('-').map(Number) : [0, 0];
-        const next = x.nextMonth ? `${x.due ? `${x.due} ` : ''}${MON_S[nm - 1]} ${ny}` : '';
-        return `<div class="goal loan-card">
-          <div class="goal-top"><h4 class="loan-name">${accMono(idx.acc[x.c.to_account_id] && idx.acc[x.c.to_account_id].logo ? idx.acc[x.c.to_account_id] : idx.acc[x.c.account_id])}<span>${esc(x.c.name)}</span></h4><span class="status good">${x.pct < 10 ? x.pct.toFixed(1) : Math.round(x.pct)}%</span></div>
-          <div class="loan-fig"><span class="big money">${fmt(x.owed)}</span><span class="loan-of">${x.real ? 'baki akaun' : 'baki'} · ${x.left} bulan lagi</span></div>
-          <div class="bar ok"><i style="width:${Math.min(100, x.pct)}%"></i></div>
-          <div class="progress-line" style="margin:0"><span><b>${x.paid}</b>/${x.total} bulan dibayar</span><span>${money(x.amt)}/bulan</span></div>
-          <div class="loan-stats">
-            <div><small>Dah bayar</small><b class="money">${fmt(x.done)}</b></div>
-            <div><small>Seterusnya</small><b>${esc(next)}</b></div>
-            <div><small>${x.real && x.finish !== x.end ? 'Jangkaan tamat' : 'Tamat'}</small><b>${esc(monthLabel(x.finish))}</b><small>${x.real && x.finish !== x.end ? `Rasmi ${esc(monthLabel(x.end))}` : `${spanLabel(x.left)} lagi`}</small></div>
-          </div>
+        const next = x.nextMonth ? `${x.due ? `${x.due} ` : ''}${MON_S[nm - 1]}` : '';
+        const endLbl = `${MON_S[+x.finish.slice(5) - 1]} ${x.finish.slice(0, 4)}`;
+        return `<div class="row loan-row">
+          ${accMono(acc)}
+          <span class="row-main"><span class="t">${esc(x.c.name)}</span>
+            <span class="s">${x.paid}/${x.total} bln · habis ${endLbl}</span>
+            <span class="bar ok"><i style="width:${Math.min(100, x.pct)}%"></i></span></span>
+          <span class="row-amt"><span class="money">${fmt(x.owed)}</span><small>${next ? `${esc(next)} · ` : ''}${fmtShort(x.amt)}</small></span>
         </div>`;
       }).join('')}</div>
     </div>`;
@@ -748,6 +731,9 @@
     const s = monthStats(m);
     const budgeted = categories('expense').filter((c) => num(c.budget));
     const budTotal = budgeted.reduce((n, c) => n + num(c.budget), 0);
+    const groupMax = Math.max(1, ...EXP_GROUPS.map(([g]) => s.groups[g] || 0));
+    const gBud = {};
+    categories('expense').forEach((c) => { if (num(c.budget)) gBud[c.group] = (gBud[c.group] || 0) + num(c.budget); });
     return `
       ${sectionHead('Pelan kewangan', 'Sasaran utama', 'Dikira automatik dari baki dan komitmen semasa')}
       <div class="goals">${planGoals().map((g) => `
@@ -772,6 +758,18 @@
         <div class="progress-line"><span>Dibayar <b class="money">${fmt(paid)}</b></span><span>daripada <span class="money">${fmt(total)}</span></span></div>
         <div class="bar ok" style="margin-bottom:14px"><i style="width:${total ? Math.min(100, (paid / total) * 100) : 0}%"></i></div>
         ${commits.length ? timelineHtml(m, commits) : '<div class="empty">Tiada komitmen aktif bulan ni.</div>'}
+      </div>
+
+      <div class="section">
+        ${sectionHead('Belanja', 'Ikut kumpulan', 'Garis kecil = bajet kumpulan', `<span class="aside">${money(s.expense)}</span>`)}
+        <div class="card"><div class="rank">${EXP_GROUPS.map(([g, e]) => {
+          const v = s.groups[g] || 0, bud = gBud[g] || 0, scale = Math.max(groupMax, bud);
+          return `<button class="rank-row" data-act="group" data-g="${esc(g)}">
+            <span class="nm"><span class="sw-dot" style="background:${GROUP_COLORS[g]}"></span><span>${e} ${esc(g)}</span></span>
+            <span class="am money">${fmt(v)}${bud ? `<small>bajet ${fmtShort(bud)}</small>` : ''}</span>
+            <span class="track"><i style="width:${(v / scale) * 100}%;background:${v > bud && bud ? 'var(--bad)' : GROUP_COLORS[g]}"></i>${bud ? `<u style="left:${(bud / scale) * 100}%"></u>` : ''}</span>
+          </button>`;
+        }).join('')}</div></div>
       </div>
 
       <div class="grid-2">
@@ -815,7 +813,7 @@
         const list = all.filter((a) => a.group === g);
         if (!list.length) return '';
         const total = list.reduce((n, a) => n + (b[a.id] || 0), 0);
-        return `<div class="acc-group-head"><h2>${label}</h2><span class="money ${total < 0 ? 'neg' : ''}">${fmt(total)}</span></div>
+        return `<div class="acc-group-head"><h2>${label}</h2><span class="money">${(g === 'credit' || g === 'borrowed') ? fmt(-total) : fmt(total)}</span></div>
           <div class="acc-grid">${list.map((a) => accCard(a, b[a.id] || 0)).join('')}</div>`;
       }).join('')}
       <div class="section"><button class="btn ghost" data-act="new-acc">Tambah akaun</button></div>`;
@@ -826,7 +824,7 @@
     const lim = num(a.credit_limit);
     let main = money(bal), sub = '';
     if (isCredit) {
-      main = `<span class="${bal < 0 ? 'neg' : ''}">${money(-bal)}</span>`;
+      main = money(-bal);
       sub = lim ? `<small>Baki had ${money(lim + bal)}</small>` : '<small>Hutang</small>';
     }
     return `<button class="acc" style="--acc:${esc(a.color || '#4D8BFF')}" data-act="acc" data-id="${esc(a.id)}">
