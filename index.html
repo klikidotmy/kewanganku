@@ -1,0 +1,50 @@
+<!doctype html>
+<html lang="ms">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>KewanganKu</title>
+  <meta name="theme-color" content="#0F1E1A">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="KewanganKu">
+  <meta name="robots" content="noindex">
+  <link rel="manifest" href="manifest.webmanifest">
+  <link rel="icon" href="icons/icon-192.png">
+  <link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,500;9..144,600&family=Manrope:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <div id="app">
+    <header class="topbar">
+      <div class="brand" aria-label="KewanganKu">
+        <span class="brand-mark" aria-hidden="true">K</span>
+        <span class="brand-name">KewanganKu</span>
+      </div>
+      <div class="topbar-actions">
+        <span id="syncState" class="sync-state" title="Status sync"></span>
+        <button class="icon-btn" id="privacyBtn" aria-label="Sorok atau tunjuk angka"></button>
+        <button class="icon-btn" id="settingsBtn" aria-label="Tetapan"></button>
+      </div>
+    </header>
+
+    <main id="view" tabindex="-1"></main>
+
+    <nav class="tabbar" aria-label="Navigasi utama">
+      <button class="tab" data-tab="home"><span class="tab-ico" data-icon="home"></span><span>Utama</span></button>
+      <button class="tab" data-tab="accounts"><span class="tab-ico" data-icon="wallet"></span><span>Akaun</span></button>
+      <button class="tab-add" id="addBtn" aria-label="Tambah transaksi"><span data-icon="plus"></span></button>
+      <button class="tab" data-tab="tx"><span class="tab-ico" data-icon="list"></span><span>Transaksi</span></button>
+      <button class="tab" data-tab="month"><span class="tab-ico" data-icon="calendar"></span><span>Bulanan</span></button>
+    </nav>
+  </div>
+
+  <div id="sheetRoot"></div>
+  <div id="toast" role="status" aria-live="polite"></div>
+
+  <script src="app.js"></script>
+</body>
+</html>
