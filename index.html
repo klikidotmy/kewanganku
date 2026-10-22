@@ -4,7 +4,8 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <title>KewanganKu</title>
-  <meta name="theme-color" content="#0F1E1A">
+  <meta name="theme-color" content="#0A0F1C" media="(prefers-color-scheme: dark)">
+  <meta name="theme-color" content="#F4F6FB" media="(prefers-color-scheme: light)">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="apple-mobile-web-app-title" content="KewanganKu">
@@ -14,37 +15,57 @@
   <link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,500;9..144,600&family=Manrope:wght@400;500;600;700&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="styles.css">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="styles.css?v=2.0.0">
 </head>
 <body>
   <div id="app">
-    <header class="topbar">
-      <div class="brand" aria-label="KewanganKu">
-        <span class="brand-mark" aria-hidden="true">K</span>
-        <span class="brand-name">KewanganKu</span>
-      </div>
-      <div class="topbar-actions">
-        <span id="syncState" class="sync-state" title="Status sync"></span>
-        <button class="icon-btn" id="privacyBtn" aria-label="Sorok atau tunjuk angka"></button>
-        <button class="icon-btn" id="settingsBtn" aria-label="Tetapan"></button>
-      </div>
-    </header>
+    <aside class="side" aria-label="Navigasi">
+      <div class="side-logo"><span class="brand-mark">K</span><span>KewanganKu</span></div>
+      <nav class="side-nav">
+        <button class="tab" data-tab="home"><span data-icon="home"></span><span>Ringkasan</span></button>
+        <button class="tab" data-tab="trend"><span data-icon="trend"></span><span>Trend</span></button>
+        <button class="tab" data-tab="plan"><span data-icon="target"></span><span>Bajet</span></button>
+        <button class="tab" data-tab="tx"><span data-icon="list"></span><span>Transaksi</span></button>
+        <button class="tab" data-tab="accounts"><span data-icon="wallet"></span><span>Akaun</span></button>
+      </nav>
+    </aside>
 
-    <main id="view" tabindex="-1"></main>
+    <div class="main">
+      <header class="topbar">
+        <div class="topbar-title">
+          <span class="brand-mark mobile-only" aria-hidden="true">K</span>
+          <div>
+            <h1 id="pageTitle">KewanganKu</h1>
+            <div id="syncState" class="sync-state"></div>
+          </div>
+        </div>
+        <div class="topbar-actions">
+          <div class="month-pick" id="monthPick">
+            <button data-act="month" data-d="-1" aria-label="Bulan sebelum"><span data-icon="chevL"></span></button>
+            <span id="monthLabel"></span>
+            <button data-act="month" data-d="1" aria-label="Bulan seterusnya"><span data-icon="chevR"></span></button>
+          </div>
+          <button class="icon-btn" id="privacyBtn" aria-label="Sorok atau tunjuk angka"></button>
+          <button class="icon-btn" id="settingsBtn" aria-label="Tetapan"></button>
+        </div>
+      </header>
+      <main id="view" tabindex="-1"></main>
+    </div>
 
     <nav class="tabbar" aria-label="Navigasi utama">
-      <button class="tab" data-tab="home"><span class="tab-ico" data-icon="home"></span><span>Utama</span></button>
-      <button class="tab" data-tab="accounts"><span class="tab-ico" data-icon="wallet"></span><span>Akaun</span></button>
-      <button class="tab-add" id="addBtn" aria-label="Tambah transaksi"><span data-icon="plus"></span></button>
-      <button class="tab" data-tab="tx"><span class="tab-ico" data-icon="list"></span><span>Transaksi</span></button>
-      <button class="tab" data-tab="month"><span class="tab-ico" data-icon="calendar"></span><span>Bulanan</span></button>
+      <button class="tab" data-tab="home"><span data-icon="home"></span><span>Ringkasan</span></button>
+      <button class="tab" data-tab="trend"><span data-icon="trend"></span><span>Trend</span></button>
+      <button class="tab" data-tab="plan"><span data-icon="target"></span><span>Bajet</span></button>
+      <button class="tab" data-tab="tx"><span data-icon="list"></span><span>Transaksi</span></button>
+      <button class="tab" data-tab="accounts"><span data-icon="wallet"></span><span>Akaun</span></button>
     </nav>
+    <button class="fab" id="addBtn" aria-label="Tambah transaksi"><span data-icon="plus"></span></button>
   </div>
 
   <div id="sheetRoot"></div>
   <div id="toast" role="status" aria-live="polite"></div>
 
-  <script src="app.js"></script>
+  <script src="app.js?v=2.0.0"></script>
 </body>
 </html>

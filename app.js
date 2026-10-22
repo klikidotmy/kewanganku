@@ -2,7 +2,7 @@
 (() => {
   'use strict';
 
-  const VERSION = '1.1.1';
+  const VERSION = '2.0.0';
   const LS = { cfg: 'kk_cfg', data: 'kk_data', queue: 'kk_queue', ui: 'kk_ui' };
   const EXP_GROUPS = [
     ['Fixed', '🏛️'], ['Household', '🏠'], ['Telco', '📱'], ['Transport', '🚗'],
@@ -29,7 +29,9 @@
     check: '<path d="M20 6 9 17l-5-5"/>',
     back: '<path d="M21 5H9l-6 7 6 7h12a1 1 0 0 0 1-1V6a1 1 0 0 0-1-1z"/><path d="m16 9-5 6M11 9l5 6"/>',
     search: '<circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/>',
-    x: '<path d="M18 6 6 18M6 6l12 12"/>'
+    x: '<path d="M18 6 6 18M6 6l12 12"/>',
+    trend: '<path d="M3 17l6-6 4 4 8-8"/><path d="M14 7h7v7"/>',
+    target: '<circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="5"/><circle cx="12" cy="12" r="1.5"/>'
   };
   const icon = (name) => `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${ICONS[name]}</svg>`;
 
@@ -44,6 +46,7 @@
   ui.month = ui.month || todayStr().slice(0, 7);
   let syncing = false;
   let syncError = '';
+  let lastSync = '';
 
   /* ---------- utils ---------- */
   function todayStr() {
@@ -215,6 +218,7 @@
       reindex();
       save(LS.data, data);
       syncError = '';
+      lastSync = new Date().toTimeString().slice(0, 5);
       render();
     } catch (e) {
       syncError = String(e.message || e);
@@ -227,7 +231,7 @@
     const el = $('#syncState');
     if (!el) return;
     el.className = 'sync-state';
-    let label = 'Sync';
+    let label = lastSync ? `Dikemas kini ${lastSync}` : 'Sync';
     if (cfg && cfg.demo) label = 'Demo';
     else if (syncing) { label = 'Sync...'; el.classList.add('pending'); }
     else if (!navigator.onLine) { label = queue.length ? `${queue.length} menunggu` : 'Offline'; el.classList.add('pending'); }
@@ -238,110 +242,187 @@
   }
 
   /* ---------- views ---------- */
+  const GROUP_COLORS = { Fixed: '#4D8BFF', Household: '#45C987', Telco: '#A78BFA', Transport: '#F2B14C', Family: '#F2696D', Lifestyle: '#2EC4D6', Savings: '#9AA4B8', 'One Time': '#F08A50' };
+  const INCOME_COLORS = ['#4D8BFF', '#45C987', '#A78BFA', '#F2B14C', '#2EC4D6', '#F08A50', '#9AA4B8'];
+  const TITLES = { home: 'Ringkasan', trend: 'Trend', plan: 'Bajet', tx: 'Transaksi', accounts: 'Akaun' };
+  const isCurMonth = (m) => m === todayStr().slice(0, 7);
+  const monthHasData = (m) => (data.transactions || []).some((t) => String(t.date).slice(0, 7) === m);
+  const shortMonth = (m) => MON_S[Number(m.slice(5, 7)) - 1];
+  const fmtShort = (n) => { const a = Math.abs(n); const s = n < 0 ? '-' : ''; return a >= 1000 ? `${s}RM${(a / 1000).toFixed(a >= 10000 ? 0 : 1)}k` : `${s}RM${Math.round(a)}`; };
+  const setting = (k, d) => { const v = data.settings && data.settings[k]; return v === undefined || v === null || v === '' ? d : v; };
+
+  function savingsOf(m) {
+    return monthTx(m).filter((t) => t.type === 'transfer' && (idx.acc[t.to_account_id] || {}).group === 'invest').reduce((n, t) => n + num(t.amount), 0);
+  }
+  function monthSeries(end, n) {
+    const out = [];
+    for (let i = n - 1; i >= 0; i--) {
+      const m = shiftMonth(end, -i);
+      const s = monthStats(m);
+      Object.assign(s, { m, has: monthHasData(m), net: s.income - s.expense, saving: savingsOf(m) });
+      out.push(s);
+    }
+    return out;
+  }
+  function deltaPill(cur, prev, upIsGood, onHero) {
+    if (!prev || Math.abs(prev) < 0.01) return '';
+    const pct = ((cur - prev) / Math.abs(prev)) * 100;
+    if (!isFinite(pct)) return '';
+    const up = pct >= 0;
+    const good = up === upIsGood;
+    return `<span class="pill ${onHero ? '' : (good ? 'good' : 'bad')}">${up ? '▲' : '▼'} ${Math.abs(pct).toFixed(0)}%</span>`;
+  }
+  function ring(pct, color, track) {
+    const p = Math.max(0, Math.min(100, pct || 0));
+    const r = 24, c = 2 * Math.PI * r;
+    return `<div class="ring"><svg viewBox="0 0 58 58"><circle cx="29" cy="29" r="${r}" fill="none" stroke="${track || 'rgba(255,255,255,.18)'}" stroke-width="6"/>
+      <circle cx="29" cy="29" r="${r}" fill="none" stroke="${color || '#fff'}" stroke-width="6" stroke-linecap="round" stroke-dasharray="${(c * p) / 100} ${c}" transform="rotate(-90 29 29)"/></svg>
+      <b>${Math.round(pct || 0)}%</b></div>`;
+  }
+  function sparkline(vals, color) {
+    const pts = vals.map((v, i) => ({ v, i })).filter((p) => p.v !== null);
+    if (pts.length < 2) return `<svg viewBox="0 0 200 46"></svg>`;
+    const min = Math.min(...pts.map((p) => p.v)), max = Math.max(...pts.map((p) => p.v));
+    const span = max - min || 1, n = vals.length - 1;
+    const xy = pts.map((p) => [(p.i / n) * 200, 40 - ((p.v - min) / span) * 30]);
+    const line = xy.map((p, i) => `${i ? 'L' : 'M'}${p[0].toFixed(1)} ${p[1].toFixed(1)}`).join('');
+    const area = `${line}L${xy[xy.length - 1][0].toFixed(1)} 46L${xy[0][0].toFixed(1)} 46Z`;
+    const last = xy[xy.length - 1];
+    return `<svg viewBox="0 0 200 46" preserveAspectRatio="none"><path d="${area}" fill="${color}" opacity=".16"/><path d="${line}" fill="none" stroke="${color}" stroke-width="2" vector-effect="non-scaling-stroke"/><circle cx="${last[0]}" cy="${last[1]}" r="3.5" fill="${color}"/></svg>`;
+  }
+  /* cols: [{ label, cur, has, groups: [[{v,color}], ...] }] grouped (side by side) and stacked (within a group) */
+  function barChart(cols, opts) {
+    opts = opts || {};
+    const W = 340, H = opts.height || 190, top = 16, bottom = 22, left = 34;
+    const totals = cols.flatMap((c) => c.groups.map((g) => g.reduce((n, s) => n + Math.max(0, s.v), 0)));
+    const max = Math.max(1, ...totals) * 1.12;
+    const plotH = H - top - bottom, colW = (W - left) / cols.length;
+    let s = `<svg viewBox="0 0 ${W} ${H}" role="img" aria-label="${esc(opts.label || 'Carta')}">`;
+    [0, 0.5, 1].forEach((f) => {
+      const y = top + plotH * (1 - f);
+      s += `<line x1="${left}" x2="${W}" y1="${y}" y2="${y}" stroke="var(--line)" stroke-dasharray="${f ? '3 4' : ''}"/>`;
+      s += `<text x="${left - 6}" y="${y + 3}" text-anchor="end">${f ? fmtShort((max / 1.12) * f) : '0'}</text>`;
+    });
+    cols.forEach((c, i) => {
+      const x0 = left + i * colW;
+      const gw = Math.min(26, (colW * 0.72) / c.groups.length);
+      const gx = x0 + (colW - gw * c.groups.length) / 2;
+      if (!c.has) {
+        s += `<rect x="${x0 + colW * 0.2}" y="${top + plotH - 18}" width="${colW * 0.6}" height="18" rx="5" fill="none" stroke="var(--line)" stroke-dasharray="3 3"/>`;
+      }
+      c.groups.forEach((g, gi) => {
+        let y = top + plotH;
+        g.forEach((seg) => {
+          const h = (Math.max(0, seg.v) / max) * plotH;
+          if (h <= 0) return;
+          y -= h;
+          s += `<rect x="${gx + gi * gw + 1}" y="${y}" width="${gw - 2}" height="${h}" rx="3" fill="${seg.color}" opacity="${c.cur ? 1 : 0.78}"><title>${esc(c.label)}: ${fmt(seg.v)}${seg.name ? ' ' + esc(seg.name) : ''}</title></rect>`;
+        });
+      });
+      if (c.cur && opts.valueLabel) {
+        const tot = c.groups[0].reduce((n, sg) => n + sg.v, 0);
+        s += `<text class="val" x="${x0 + colW / 2}" y="${top + plotH - (tot / max) * plotH - 5}" text-anchor="middle">${fmtShort(tot)}</text>`;
+      }
+      s += `<text class="${c.cur ? 'cur' : ''}" x="${x0 + colW / 2}" y="${H - 6}" text-anchor="middle">${esc(c.label)}</text>`;
+    });
+    return `<div class="chart">${s}</svg></div>`;
+  }
+
   function render() {
     document.body.classList.toggle('private', !!ui.private);
     $('#privacyBtn').innerHTML = icon(ui.private ? 'eyeOff' : 'eye');
     const view = $('#view');
-    const nav = document.querySelector('.tabbar');
-    if (!cfg || !data) { nav.style.display = 'none'; view.innerHTML = setupView(); bindSetup(); return; }
-    nav.style.display = '';
+    const app = $('#app');
+    if (!cfg || !data) { app.classList.add('setup-mode'); $('#pageTitle').textContent = 'KewanganKu'; view.innerHTML = setupView(); bindSetup(); return; }
+    app.classList.remove('setup-mode');
+    if (!TITLES[ui.tab]) ui.tab = 'home';
     document.querySelectorAll('.tab').forEach((b) => b.classList.toggle('active', b.dataset.tab === ui.tab));
-    const v = { home: homeView, accounts: accountsView, tx: txView, month: monthView }[ui.tab] || homeView;
+    $('#pageTitle').textContent = TITLES[ui.tab];
+    $('#monthLabel').textContent = `${shortMonth(ui.month)} ${ui.month.slice(0, 4)}`;
+    const v = { home: homeView, trend: trendView, plan: planView, tx: txView, accounts: accountsView }[ui.tab];
     view.innerHTML = v();
     setSync();
     save(LS.ui, ui);
   }
 
-  function guilloche() {
-    let paths = '';
-    const R = 96, r = 24;
-    [70, 58, 46, 34].forEach((d, k) => {
-      let p = '';
-      for (let i = 0; i <= 720; i++) {
-        const t = (i / 720) * Math.PI * 2;
-        const x = (R - r) * Math.cos(t) + d * Math.cos(((R - r) / r) * t);
-        const y = (R - r) * Math.sin(t) - d * Math.sin(((R - r) / r) * t);
-        p += `${i ? 'L' : 'M'}${(330 + x).toFixed(1)} ${(40 + y).toFixed(1)}`;
-      }
-      paths += `<path d="${p}" stroke-opacity="${0.9 - k * 0.15}"/>`;
-    });
-    for (let w = 0; w < 7; w++) {
-      let p = '';
-      for (let x = 0; x <= 400; x += 4) {
-        const y = 200 + w * 6 + Math.sin(x / 22 + w * 0.7) * 5;
-        p += `${x ? 'L' : 'M'}${x} ${y.toFixed(1)}`;
-      }
-      paths += `<path d="${p}" stroke-opacity="0.5"/>`;
-    }
-    return `<svg class="hero-guilloche" viewBox="0 0 400 240" preserveAspectRatio="xMaxYMin slice" fill="none" stroke="#D4AE68" stroke-width="0.6">${paths}</svg>`;
+  function sectionHead(eyebrow, title, sub, aside) {
+    return `<div class="section-head"><div>${eyebrow ? `<div class="eyebrow">${eyebrow}</div>` : ''}<h2>${title}</h2>${sub ? `<p>${sub}</p>` : ''}</div>${aside || ''}</div>`;
   }
-
-  function monthBar() {
-    return `<div class="month-bar">
-      <div class="m">${monthLabel(ui.month)}</div>
-      <div class="nav">
-        <button data-act="month" data-d="-1" aria-label="Bulan sebelum">${icon('chevL')}</button>
-        <button data-act="month" data-d="1" aria-label="Bulan seterusnya">${icon('chevR')}</button>
-      </div></div>`;
-  }
-
 
   function homeView() {
+    const m = ui.month, pm = shiftMonth(m, -1);
+    const s = monthStats(m), p = monthStats(pm), pHas = monthHasData(pm);
     const b = balances();
-    let assets = 0, liab = 0;
-    accounts().forEach((a) => { const v = b[a.id] || 0; if (v >= 0) assets += v; else liab += -v; });
-    const s = monthStats(ui.month);
+    const budgetTotal = categories('expense').reduce((n, c) => n + num(c.budget), 0);
+    const [y, mo] = m.split('-').map(Number);
+    const dim = new Date(y, mo, 0).getDate();
+    const cur = isCurMonth(m);
+    const day = cur ? Number(todayStr().slice(8, 10)) : dim;
+    const remain = budgetTotal - s.expense;
+    const perDay = remain / Math.max(1, dim - day + 1);
+    const credit = accounts().filter((a) => a.group === 'credit');
+    const owed = credit.reduce((n, a) => n + Math.max(0, -(b[a.id] || 0)), 0);
+    const lim = credit.reduce((n, a) => n + num(a.credit_limit), 0);
+    const commits = monthCommitments(m);
+    const outs = commits.filter((x) => commitKind(x.c) !== 'income');
+    const paidN = outs.filter((x) => x.status.k === 'paid').length;
+    const pending = commits.filter((x) => x.status.k !== 'paid');
+    const saving = savingsOf(m);
+    const recent = monthTx(m).slice(0, 6);
+    const groupMax = Math.max(1, ...EXP_GROUPS.map(([g]) => s.groups[g] || 0));
     const budgets = {};
     categories('expense').forEach((c) => { if (num(c.budget)) budgets[c.group] = (budgets[c.group] || 0) + num(c.budget); });
-    const thisMonth = todayStr().slice(0, 7);
-    const pending = monthCommitments(thisMonth).filter((x) => x.status.k !== 'paid');
-    const recent = (data.transactions || []).slice().sort((a, b) => (String(b.date) + String(b.created_at)).localeCompare(String(a.date) + String(a.created_at))).slice(0, 6);
 
     return `
-      <section class="hero" aria-label="Nilai bersih">
-        ${guilloche()}
-        <div class="hero-label">Nilai bersih</div>
-        <div class="hero-amount money"><span class="cur">RM</span>${(assets - liab < 0 ? '-' : '') + fmtAbs(assets - liab)}</div>
-        <div class="hero-split">
-          <div><span>Aset</span><strong>${money(assets)}</strong></div>
-          <div><span>Hutang</span><strong>${money(liab)}</strong></div>
+      <section class="hero">
+        <div class="hero-top">
+          <div><div class="eyebrow">${cur ? 'Bulan semasa' : 'Bulan dipilih'} · ${esc(monthLabel(m))}</div>
+            <h2>Aliran duit bulan ini</h2>
+            <p>${cur ? `Hari ${day}/${dim}` : 'Bulan penuh'} · semua akaun digabung</p></div>
+          <span class="live-chip">${cur ? '<i></i>Semasa' : 'Arkib'}</span>
+        </div>
+        <div class="kpi-grid">
+          <div class="kpi wide"><div class="kpi-row"><div style="flex:1;min-width:0"><div class="kpi-label">Belanja</div><div class="kpi-value money">${fmt(s.expense)}</div></div>
+            ${ring(budgetTotal ? (s.expense / budgetTotal) * 100 : 0, s.expense > budgetTotal ? '#F2696D' : '#fff')}</div>
+            <div class="kpi-sub">/ ${money(budgetTotal)} bajet ${pHas ? deltaPill(s.expense, p.expense, false, true) : ''}</div>
+            <div class="kpi-foot">${remain >= 0 ? `Baki bajet ${money(remain)}${cur ? ` · boleh ${money(perDay)}/hari` : ''}` : `Lebih bajet ${money(-remain)}`}</div></div>
+          <div class="kpi"><div class="kpi-label">Masuk</div><div class="kpi-value money">${fmt(s.income)}</div>
+            <div class="kpi-sub">${pHas ? deltaPill(s.income, p.income, true, true) + ' vs ' + shortMonth(pm) : 'Gaji, komisen, affiliate'}</div>
+            <div class="kpi-foot">Baki bulan <span class="money">${fmt(s.income - s.expense, true)}</span></div></div>
+          <div class="kpi"><div class="kpi-label">Hutang kad & PayLater</div><div class="kpi-value money">${fmt(owed)}</div>
+            <div class="kpi-sub">/ ${money(lim)} had · ${lim ? Math.round((owed / lim) * 100) : 0}% guna</div>
+            <div class="seg-bar">${credit.filter((a) => (b[a.id] || 0) < 0).map((a) => `<i style="width:${lim ? (Math.max(0, -(b[a.id] || 0)) / lim) * 100 : 0}%;background:${esc(a.color || '#fff')}"></i>`).join('')}</div></div>
+          <div class="kpi wide"><div class="kpi-label">Bayaran bulan ini</div><div class="kpi-value">${paidN}<span style="font-size:15px;opacity:.7">/${outs.length}</span></div>
+            <div class="kpi-sub">selesai · simpanan <span class="money">${fmt(saving)}</span></div>
+            <div class="seg-bar"><i style="width:${outs.length ? (paidN / outs.length) * 100 : 0}%;background:#45C987"></i></div></div>
         </div>
       </section>
 
-      ${creditPanel(b)}
-
-      <div class="section">
-        <div class="section-head"><h2>Jadual bayaran</h2><button class="link-btn" data-act="tab" data-tab="month">${esc(monthLabel(thisMonth))}</button></div>
-        ${pending.length ? timelineHtml(thisMonth, pending.slice(0, 6)) + (pending.length > 6 ? `<p class="hint"><button class="link-btn" data-act="tab" data-tab="month">Lihat semua ${pending.length} item</button></p>` : '')
-          : `<div class="empty">Semua bayaran ${esc(monthLabel(thisMonth))} dah selesai.</div>`}
-      </div>
-
-      ${monthBar()}
-      <div class="flow">
-        <div><span>Masuk</span><strong class="pos">${money(s.income)}</strong></div>
-        <div><span>Keluar</span><strong class="neg">${money(s.expense)}</strong></div>
-        <div><span>Baki bulan</span><strong>${money(s.income - s.expense, true)}</strong></div>
-      </div>
-
-      <div class="section">
-        <div class="section-head"><h2>Belanja ikut kumpulan</h2></div>
-        <div class="groups">
-          ${EXP_GROUPS.map(([g, e]) => {
-            const spent = s.groups[g] || 0, bud = budgets[g] || 0;
-            const pct = bud ? Math.min(100, (spent / bud) * 100) : 0;
-            return `<button class="group" data-act="group" data-g="${esc(g)}">
-              <div class="group-top"><span>${esc(g)}</span><span class="e">${e}</span></div>
-              <strong>${money(spent)}</strong>
-              ${bud ? `<div class="bar ${spent > bud ? 'over' : ''}"><i style="width:${pct}%"></i></div><small>bajet ${money(bud)}</small>` : '<small>&nbsp;</small>'}
-            </button>`;
-          }).join('')}
+      <div class="grid-2">
+        <div class="section">
+          ${sectionHead('Fokus utama', 'Perlu bayar', `${pending.length} item belum selesai bulan ni`, `<button class="link-btn" data-act="tab" data-tab="plan">Jadual penuh</button>`)}
+          ${pending.length ? timelineHtml(m, pending.slice(0, 5)) : `<div class="empty">Semua bayaran ${esc(monthLabel(m))} dah selesai.</div>`}
         </div>
+        ${creditPanel(b)}
       </div>
 
-      <div class="section">
-        <div class="section-head"><h2>Terkini</h2><button class="link-btn" data-act="tab" data-tab="tx">Semua</button></div>
-        ${recent.length ? `<div class="list">${recent.map(txRow).join('')}</div>`
-          : `<div class="empty">Belum ada transaksi.<br><button class="btn" data-act="add" style="width:auto;display:inline-flex;padding:10px 18px">Tambah transaksi pertama</button></div>`}
+      <div class="grid-2">
+        <div class="section">
+          ${sectionHead('Belanja', 'Ikut kumpulan', 'Garis kecil = bajet kumpulan', `<span class="aside">${money(s.expense)}</span>`)}
+          <div class="card"><div class="rank">${EXP_GROUPS.map(([g, e]) => {
+            const v = s.groups[g] || 0, bud = budgets[g] || 0, scale = Math.max(groupMax, bud);
+            return `<button class="rank-row" data-act="group" data-g="${esc(g)}">
+              <span class="nm"><span class="sw-dot" style="background:${GROUP_COLORS[g]}"></span><span>${e} ${esc(g)}</span></span>
+              <span class="am money">${fmt(v)}${bud ? `<small>bajet ${fmtShort(bud)}</small>` : ''}</span>
+              <span class="track"><i style="width:${(v / scale) * 100}%;background:${v > bud && bud ? 'var(--bad)' : GROUP_COLORS[g]}"></i>${bud ? `<u style="left:${(bud / scale) * 100}%"></u>` : ''}</span>
+            </button>`;
+          }).join('')}</div></div>
+        </div>
+        <div class="section">
+          ${sectionHead('Terkini', 'Transaksi', '', `<button class="link-btn" data-act="tab" data-tab="tx">Semua</button>`)}
+          ${recent.length ? `<div class="list">${recent.map(txRow).join('')}</div>`
+            : `<div class="empty">Tiada transaksi untuk ${esc(monthLabel(m))}.<br><button class="btn" data-act="add" style="width:auto;display:inline-flex;padding:10px 18px">Tambah transaksi</button></div>`}
+        </div>
       </div>`;
   }
 
@@ -353,19 +434,18 @@
     const active = list.filter((a) => owedOf(a) > 0.004).sort((x, y) => owedOf(y) - owedOf(x));
     const clear = list.length - active.length;
     return `<div class="section">
-      <div class="section-head"><h2>Kad & PayLater</h2><span class="aside neg">${money(total)}</span></div>
+      ${sectionHead('Hutang', 'Kad & PayLater', clear ? `${clear} akaun tiada hutang` : '', `<span class="aside neg money">${fmt(total)}</span>`)}
       ${active.length ? `<div class="list">${active.map((a) => {
         const owed = owedOf(a), lim = num(a.credit_limit);
         const pct = lim ? Math.min(100, (owed / lim) * 100) : 0;
         return `<button class="row credit-row" data-act="acc" data-id="${esc(a.id)}">
-          <span class="acc-mono" style="--acc:${esc(a.color || '#D4AE68')}">${esc(initials(a.name))}</span>
+          <span class="acc-mono" style="--acc:${esc(a.color || '#4D8BFF')}">${esc(initials(a.name))}</span>
           <span class="row-main"><span class="t">${esc(a.name)}</span>
-            <span class="s">${lim ? `Baki had ${money(lim - owed)}` : 'Hutang'}</span>
+            <span class="s">${lim ? `Baki had ${money(lim - owed)} · ${Math.round(pct)}%` : 'Hutang'}</span>
             ${lim ? `<span class="bar ${pct >= 80 ? 'over' : ''}"><i style="width:${pct}%"></i></span>` : ''}</span>
           <span class="row-amt neg">${money(owed)}</span>
         </button>`;
       }).join('')}</div>` : '<div class="empty">Tiada hutang kad atau PayLater.</div>'}
-      ${clear && active.length ? `<p class="hint"><button class="link-btn" data-act="tab" data-tab="accounts">${clear} lagi tiada hutang</button></p>` : ''}
     </div>`;
   }
 
@@ -375,13 +455,12 @@
     const today = todayStr();
     const keys = Object.keys(groups).map(Number).sort((a, b) => (a || 99) - (b || 99));
     return `<div class="tl">${keys.map((d) => {
-      let dateCol = '<strong>?</strong><span>Tiada tarikh</span>';
+      let dateCol = '<strong>·</strong><span>Tiada tarikh</span>';
       let isToday = false;
       if (d) {
-        const ds = `${m}-${String(d).padStart(2, '0')}`;
         const [y, mo] = m.split('-').map(Number);
         dateCol = `<strong>${d}</strong><span>${DAYS[new Date(y, mo - 1, d).getDay()].slice(0, 3)}</span>`;
-        isToday = ds === today;
+        isToday = `${m}-${String(d).padStart(2, '0')}` === today;
       }
       return `<div class="tl-day ${isToday ? 'today' : ''}"><div class="tl-date">${dateCol}</div>
         <div class="tl-items">${groups[d].map(tlItem).join('')}</div></div>`;
@@ -396,9 +475,7 @@
     if (kind === 'transfer') route = `${from ? from.name : '?'} → ${to ? to.name : '?'}`;
     else if (kind === 'income') route = from ? `Masuk ${from.name}` : 'Pendapatan';
     else route = from ? from.name : ((idx.cat[c.category_id] || {}).name || '');
-    let amt;
-    if (x.amount === null) amt = `<span class="faint">${kind === 'income' ? 'Ikut gaji' : 'Isi jumlah'}</span>`;
-    else amt = money(x.amount, kind === 'income', kind === 'income' ? 'pos' : '');
+    const amt = x.amount === null ? `<span class="faint">${kind === 'income' ? 'Ikut gaji' : 'Isi jumlah'}</span>` : money(x.amount, kind === 'income', kind === 'income' ? 'pos' : '');
     return `<button class="tl-item st-${status.k}" data-act="${tx ? 'edit-tx' : 'pay'}" data-id="${esc(tx ? tx.id : c.id)}">
       <span class="tl-dot">${status.k === 'paid' ? icon('check') : ''}</span>
       <span class="row-main"><span class="t">${esc(c.name)}</span><span class="s">${esc(route)}</span></span>
@@ -412,10 +489,10 @@
     const to = idx.acc[t.to_account_id];
     let ico = cat ? cat.icon : '•', title = t.note || (cat ? cat.name : TX_LABEL[t.type]), sub = acc ? acc.name : '';
     let cls = '', sign = '';
-    if (t.type === 'expense') { cls = 'neg'; sign = '-'; }
+    if (t.type === 'expense') sign = '-';
     if (t.type === 'income') { cls = 'pos'; sign = '+'; }
-    if (t.type === 'transfer') { ico = '⇄'; title = t.note || `Pindah ke ${to ? to.name : '?'}`; sub = `${acc ? acc.name : '?'} → ${to ? to.name : '?'}`; }
-    if (t.type === 'adjust') { ico = '⚖️'; title = t.note || 'Pelarasan baki'; sign = num(t.amount) >= 0 ? '+' : '-'; }
+    if (t.type === 'transfer') { ico = '⇄'; title = t.note || `Pindah ke ${to ? to.name : '?'}`; sub = `${acc ? acc.name : '?'} → ${to ? to.name : '?'}`; cls = 'faint'; }
+    if (t.type === 'adjust') { ico = '⚖️'; title = t.note || 'Pelarasan baki'; sign = num(t.amount) >= 0 ? '+' : '-'; cls = 'faint'; }
     if (cat && t.note && t.type !== 'transfer') sub = `${cat.name} · ${sub}`;
     return `<button class="row" data-act="edit-tx" data-id="${esc(t.id)}">
       <span class="row-ico">${esc(ico)}</span>
@@ -424,18 +501,204 @@
     </button>`;
   }
 
+  function trendView() {
+    const N = 6;
+    const ser = monthSeries(ui.month, N);
+    const cur = ser[N - 1], prev = ser[N - 2];
+    const withData = ser.filter((x) => x.has);
+    const avg = (k) => withData.length ? withData.reduce((n, x) => n + x[k], 0) / withData.length : 0;
+    const best = withData.slice().sort((a, b) => b.net - a.net)[0];
+    const cards = [
+      ['Masuk', 'income', true, '#4D8BFF', 'Semua sumber'],
+      ['Keluar', 'expense', false, '#F08A50', 'Belanja sahaja, tak termasuk pindahan'],
+      ['Baki bersih', 'net', true, '#45C987', 'Masuk tolak keluar'],
+      ['Simpanan', 'saving', true, '#A78BFA', 'Pindah ke KWSP, ASNB & pelaburan']
+    ];
+    const incomeCats = categories('income');
+    const incColor = {};
+    incomeCats.forEach((c, i) => { incColor[c.id] = INCOME_COLORS[i % INCOME_COLORS.length]; });
+    const incUsed = incomeCats.filter((c) => ser.some((x) => x.cats[c.id]));
+    // category table: this month vs average of previous months with data
+    const prevWith = ser.slice(0, N - 1).filter((x) => x.has);
+    const rows = categories('expense').map((c) => {
+      const now = cur.cats[c.id] || 0;
+      const av = prevWith.length ? prevWith.reduce((n, x) => n + (x.cats[c.id] || 0), 0) / prevWith.length : null;
+      return { c, now, av };
+    }).filter((r) => r.now || r.av).sort((a, b) => b.now - a.now).slice(0, 10);
 
+    return `
+      ${sectionHead(`${N} bulan terakhir · sehingga ${esc(monthLabel(ui.month))}`, 'Trend bulanan', `Perbandingan ${esc(monthLabel(cur.m))} dengan ${esc(monthLabel(prev.m))}.${isCurMonth(ui.month) ? ' Bulan semasa belum lengkap.' : ''}`)}
+      <div class="spark-grid">${cards.map(([label, k, upGood, color, sub], i) => `
+        <div class="spark-card ${i === 0 ? 'feature' : ''}">
+          <div class="lbl"><span>${label}</span>${prev.has && cur.has ? deltaPill(cur[k], prev[k], upGood, false) : ''}</div>
+          <div class="val money">${cur.has ? fmt(cur[k], k === 'net') : '<span class="faint">Tiada data</span>'}</div>
+          <div class="sub">${sub}</div>
+          ${sparkline(ser.map((x) => (x.has ? x[k] : null)), i === 0 ? '#ffffff' : color)}
+        </div>`).join('')}
+      </div>
+
+      <div class="section"><div class="card">
+        <div class="card-head"><div><div class="eyebrow">Aliran tunai</div><h3>Masuk vs keluar</h3></div>
+          <div class="chips-row">${best ? `<span class="stat-chip">Terbaik <b>${shortMonth(best.m)}</b> <span class="money">${fmtShort(best.net)}</span></span>` : ''}<span class="stat-chip">Purata keluar <b class="money">${fmtShort(avg('expense'))}</b></span></div></div>
+        <div class="legend"><span><i style="background:#4D8BFF"></i>Masuk</span><span><i style="background:#F08A50"></i>Keluar</span></div>
+        ${barChart(ser.map((x) => ({ label: shortMonth(x.m), cur: x.m === ui.month, has: x.has, groups: [[{ v: x.income, color: '#4D8BFF', name: 'masuk' }], [{ v: x.expense, color: '#F08A50', name: 'keluar' }]] })), { label: 'Masuk vs keluar ikut bulan' })}
+        <div class="chart-note">Kotak putus-putus = bulan tiada data lagi, bukan sifar. Upload penyata untuk isi.</div>
+      </div></div>
+
+      <div class="grid-2">
+        <div class="section"><div class="card">
+          <div class="card-head"><div><div class="eyebrow">Belanja</div><h3>Ikut kumpulan</h3></div><span class="stat-chip">Purata <b class="money">${fmtShort(avg('expense'))}</b></span></div>
+          <div class="legend">${EXP_GROUPS.filter(([g]) => ser.some((x) => x.groups[g])).map(([g]) => `<span><i style="background:${GROUP_COLORS[g]}"></i>${esc(g)}</span>`).join('')}</div>
+          ${barChart(ser.map((x) => ({ label: shortMonth(x.m), cur: x.m === ui.month, has: x.has, groups: [EXP_GROUPS.map(([g]) => ({ v: x.groups[g] || 0, color: GROUP_COLORS[g], name: g }))] })), { label: 'Belanja ikut kumpulan', valueLabel: true })}
+        </div></div>
+        <div class="section"><div class="card">
+          <div class="card-head"><div><div class="eyebrow">Pendapatan</div><h3>Ikut sumber</h3></div><span class="stat-chip">Purata <b class="money">${fmtShort(avg('income'))}</b></span></div>
+          <div class="legend">${incUsed.map((c) => `<span><i style="background:${incColor[c.id]}"></i>${esc(c.name)}</span>`).join('')}</div>
+          ${barChart(ser.map((x) => ({ label: shortMonth(x.m), cur: x.m === ui.month, has: x.has, groups: [incUsed.map((c) => ({ v: x.cats[c.id] || 0, color: incColor[c.id], name: c.name }))] })), { label: 'Pendapatan ikut sumber', valueLabel: true })}
+        </div></div>
+      </div>
+
+      <div class="section">
+        ${sectionHead('Kategori', `${esc(monthLabel(cur.m))} vs purata`, prevWith.length ? `Purata ${prevWith.length} bulan sebelum yang ada data` : 'Belum cukup bulan untuk purata')}
+        ${rows.length ? `<div class="list">${rows.map((r) => {
+          const d = r.av ? ((r.now - r.av) / r.av) * 100 : null;
+          return `<div class="row"><span class="row-ico">${esc(r.c.icon)}</span>
+            <span class="row-main"><span class="t">${esc(r.c.name)}</span><span class="s">${r.av !== null ? `Purata ${fmt(r.av)}` : 'Tiada purata'}</span></span>
+            <span class="row-amt"><span class="money">${fmt(r.now)}</span>${d !== null && isFinite(d) ? `<small class="${d > 0 ? 'neg' : 'pos'}">${d > 0 ? '▲' : '▼'} ${Math.abs(d).toFixed(0)}%</small>` : ''}</span></div>`;
+        }).join('')}</div>` : '<div class="empty">Tiada belanja bulan ni.</div>'}
+      </div>`;
+  }
+
+  function planGoals() {
+    const b = balances();
+    const now = todayStr().slice(0, 7);
+    const goals = [];
+    // 1. PayLater cleared by target month
+    const bnpl = accounts().filter((a) => a.type === 'bnpl');
+    const bnplOwed = bnpl.reduce((n, a) => n + Math.max(0, -(b[a.id] || 0)), 0);
+    const clearBy = String(setting('plan_paylater_clear_by', '2027-01'));
+    const [cy, cm] = clearBy.split('-').map(Number), [ny, nm] = now.split('-').map(Number);
+    const monthsLeft = Math.max(1, (cy - ny) * 12 + (cm - nm) + 1);
+    goals.push({
+      title: `PayLater kosong menjelang ${monthLabel(clearBy)}`,
+      big: fmt(bnplOwed), status: bnplOwed < 0.01 ? ['good', 'Selesai'] : ['warn', `${monthsLeft} bulan lagi`],
+      pct: null, text: bnplOwed < 0.01 ? 'Tiada baki PayLater.' : `Perlu kurang ${money(bnplOwed / monthsLeft)} sebulan, dan jangan buat belian PayLater baru.`
+    });
+    // 2. Card utilisation
+    const cards = accounts().filter((a) => a.type === 'card' && num(a.credit_limit));
+    const cardOwed = cards.reduce((n, a) => n + Math.max(0, -(b[a.id] || 0)), 0);
+    const cardLim = cards.reduce((n, a) => n + num(a.credit_limit), 0);
+    const util = cardLim ? cardOwed / cardLim : 0;
+    const maxU = num(setting('plan_card_util_max', 0.6));
+    goals.push({
+      title: `Guna kad kredit bawah ${Math.round(maxU * 100)}% had`,
+      big: `${Math.round(util * 100)}%`, status: util <= maxU ? ['good', 'Dalam had'] : ['bad', 'Terlebih'],
+      pct: util * 100, marker: maxU * 100,
+      text: `${money(cardOwed)} daripada ${money(cardLim)}. Bayar penuh setiap penyata supaya tiada faedah.`
+    });
+    // 3. Fixed commitments vs stable income
+    const fixed = monthCommitments(now).filter((x) => commitKind(x.c) === 'expense' && x.amount).reduce((n, x) => n + x.amount, 0);
+    const stable = num(setting('plan_stable_income', 0));
+    const ratio = stable ? fixed / stable : 0;
+    goals.push({
+      title: 'Komitmen tetap ditanggung gaji + komisen',
+      big: `${Math.round(ratio * 100)}%`, status: !stable ? ['na', 'Tiada data'] : ratio <= 0.7 ? ['good', 'Selamat'] : ratio <= 0.9 ? ['warn', 'Ketat'] : ['bad', 'Tak cukup'],
+      pct: ratio * 100, marker: 70,
+      text: `Komitmen tetap ${money(fixed)} sebulan berbanding pendapatan tetap ${money(stable)}. Sasaran bawah 70%.`
+    });
+    // 4. Emergency fund
+    const target = num(setting('plan_emergency_target', 6000));
+    const ids = String(setting('plan_emergency_accounts', '')).split(',').map((x) => x.trim()).filter(Boolean);
+    const have = ids.reduce((n, id) => n + Math.max(0, b[id] || 0), 0);
+    goals.push({
+      title: `Dana kecemasan ${fmt(target)}`,
+      big: ids.length ? fmt(have) : '–', status: !ids.length ? ['na', 'Akaun belum dipilih'] : have >= target ? ['good', 'Cukup'] : ['warn', `${Math.round((have / target) * 100)}%`],
+      pct: ids.length ? (have / target) * 100 : null,
+      text: ids.length ? `Disimpan dalam ${ids.map((id) => (idx.acc[id] || {}).name || id).join(', ')}.` : 'Kira-kira 3 bulan komitmen tetap. Pilih satu akaun khas untuk dana ni.'
+    });
+    return goals;
+  }
+
+  function planView() {
+    const m = ui.month;
+    const commits = monthCommitments(m);
+    const outs = commits.filter((x) => commitKind(x.c) !== 'income');
+    const total = outs.reduce((n, x) => n + (x.amount || 0), 0);
+    const paid = outs.filter((x) => x.tx).reduce((n, x) => n + num(x.tx.amount), 0);
+    const s = monthStats(m);
+    const budgeted = categories('expense').filter((c) => num(c.budget));
+    const budTotal = budgeted.reduce((n, c) => n + num(c.budget), 0);
+    return `
+      ${sectionHead('Pelan kewangan', 'Sasaran utama', 'Dikira automatik dari baki dan komitmen semasa')}
+      <div class="goals">${planGoals().map((g) => `
+        <div class="goal">
+          <div class="goal-top"><h4>${esc(g.title)}</h4><span class="status ${g.status[0]}">${esc(g.status[1])}</span></div>
+          <div class="big money">${g.big}</div>
+          ${g.pct !== null && g.pct !== undefined ? `<div class="rank-row" style="display:block"><span class="track" style="display:block"><i style="width:${Math.min(100, g.pct)}%;background:${g.status[0] === 'bad' ? 'var(--bad)' : g.status[0] === 'good' ? 'var(--good)' : 'var(--bar)'}"></i>${g.marker ? `<u style="left:${g.marker}%"></u>` : ''}</span></div>` : ''}
+          <p>${g.text}</p>
+        </div>`).join('')}
+      </div>
+      <div class="card" style="margin-top:12px">
+        <div class="eyebrow">Peraturan duit</div>
+        <ul class="rules">
+          <li><span class="n">1</span><span><b>Gaji + komisen KLIKI</b> untuk komitmen tetap: loan, PTPTN, bil, isteri, Coway.</span></li>
+          <li><span class="n">2</span><span><b>Komisen affiliate</b> untuk belanja harian dan bayar baki PayLater.</span></li>
+          <li><span class="n">3</span><span><b>Tiada belian PayLater baru</b> sampai semua baki kosong. Kad UOB dibayar penuh setiap 19hb.</span></li>
+        </ul>
+      </div>
+
+      <div class="section">
+        ${sectionHead(esc(monthLabel(m)), 'Jadual bayaran', '', `<button class="link-btn" data-act="manage-commit">Urus</button>`)}
+        <div class="progress-line"><span>Dibayar <b class="money">${fmt(paid)}</b></span><span>daripada <span class="money">${fmt(total)}</span></span></div>
+        <div class="bar ok" style="margin-bottom:14px"><i style="width:${total ? Math.min(100, (paid / total) * 100) : 0}%"></i></div>
+        ${commits.length ? timelineHtml(m, commits) : '<div class="empty">Tiada komitmen aktif bulan ni.</div>'}
+      </div>
+
+      <div class="grid-2">
+        <div class="section">
+          ${sectionHead('Bajet', 'Ikut kategori', `${money(s.expense)} daripada ${money(budTotal)}`, `<button class="link-btn" data-act="manage-budget">Ubah</button>`)}
+          ${budgeted.length ? `<div class="card"><div class="rank">${budgeted.map((c) => {
+            const sp = s.cats[c.id] || 0, bud = num(c.budget), pct = (sp / bud) * 100;
+            return `<div class="rank-row">
+              <span class="nm"><span>${esc(c.icon)}</span><span>${esc(c.name)}</span></span>
+              <span class="am"><span class="money ${sp > bud ? 'neg' : ''}">${fmt(sp)}</span><small>/ ${fmtShort(bud)}</small></span>
+              <span class="track"><i style="width:${Math.min(100, pct)}%;background:${sp > bud ? 'var(--bad)' : pct > 85 ? 'var(--warn)' : 'var(--bar)'}"></i></span>
+            </div>`;
+          }).join('')}</div></div>` : '<div class="empty">Belum ada bajet kategori.</div>'}
+        </div>
+        <div class="section">
+          ${sectionHead('Pendapatan', 'Ikut sumber', '', `<span class="aside pos money">${fmt(s.income)}</span>`)}
+          ${categories('income').filter((c) => s.cats[c.id]).length ? `<div class="list">${categories('income').filter((c) => s.cats[c.id]).map((c) => `<div class="row"><span class="row-ico">${esc(c.icon)}</span>
+            <span class="row-main"><span class="t">${esc(c.name)}</span><span class="s">${esc(c.group)} · ${Math.round((s.cats[c.id] / s.income) * 100)}%</span></span>
+            <span class="row-amt pos">${money(s.cats[c.id])}</span></div>`).join('')}</div>` : '<div class="empty">Belum ada pendapatan direkod bulan ni.</div>'}
+        </div>
+      </div>`;
+  }
 
   function accountsView() {
     const b = balances();
     const all = accounts();
-    return ACC_GROUPS.map(([g, label]) => {
-      const list = all.filter((a) => a.group === g);
-      if (!list.length) return '';
-      const total = list.reduce((n, a) => n + (b[a.id] || 0), 0);
-      return `<div class="acc-group-head"><h2>${label}</h2><span class="${total < 0 ? 'neg' : ''}">${money(total)}</span></div>
-        <div class="acc-grid">${list.map((a) => accCard(a, b[a.id] || 0)).join('')}</div>`;
-    }).join('') + `<div class="section"><button class="btn ghost" data-act="new-acc">Tambah akaun</button></div>`;
+    const tot = (g) => all.filter((a) => a.group === g).reduce((n, a) => n + (b[a.id] || 0), 0);
+    const assets = all.reduce((n, a) => n + Math.max(0, b[a.id] || 0), 0);
+    const liab = all.reduce((n, a) => n + Math.max(0, -(b[a.id] || 0)), 0);
+    return `
+      <section class="hero">
+        <div class="hero-top"><div><div class="eyebrow">Semua akaun</div><h2 class="money">${fmt(assets - liab)}</h2><p>Nilai bersih: aset tolak hutang</p></div></div>
+        <div class="kpi-grid">
+          <div class="kpi"><div class="kpi-label">Tunai & bank</div><div class="kpi-value money">${fmt(tot('debit'))}</div></div>
+          <div class="kpi"><div class="kpi-label">Pelaburan</div><div class="kpi-value money">${fmt(tot('invest'))}</div></div>
+          <div class="kpi"><div class="kpi-label">Kad & PayLater</div><div class="kpi-value money">${fmt(-tot('credit'))}</div></div>
+          <div class="kpi"><div class="kpi-label">Pinjaman</div><div class="kpi-value money">${fmt(-tot('borrowed'))}</div></div>
+        </div>
+      </section>
+      ${ACC_GROUPS.map(([g, label]) => {
+        const list = all.filter((a) => a.group === g);
+        if (!list.length) return '';
+        const total = list.reduce((n, a) => n + (b[a.id] || 0), 0);
+        return `<div class="acc-group-head"><h2>${label}</h2><span class="money ${total < 0 ? 'neg' : ''}">${fmt(total)}</span></div>
+          <div class="acc-grid">${list.map((a) => accCard(a, b[a.id] || 0)).join('')}</div>`;
+      }).join('')}
+      <div class="section"><button class="btn ghost" data-act="new-acc">Tambah akaun</button></div>`;
   }
 
   function accCard(a, bal) {
@@ -446,7 +709,7 @@
       main = `<span class="${bal < 0 ? 'neg' : ''}">${money(-bal)}</span>`;
       sub = lim ? `<small>Baki had ${money(lim + bal)}</small>` : '<small>Hutang</small>';
     }
-    return `<button class="acc" style="--acc:${esc(a.color || '#D4AE68')}" data-act="acc" data-id="${esc(a.id)}">
+    return `<button class="acc" style="--acc:${esc(a.color || '#4D8BFF')}" data-act="acc" data-id="${esc(a.id)}">
       <div class="acc-head"><span class="acc-mono">${esc(initials(a.name))}</span>
         <span class="acc-name">${esc(a.name)}${a.last4 ? `<small>•••• ${esc(a.last4)}</small>` : `<small>${esc(ACC_TYPES[a.type] || '')}</small>`}</span></div>
       <div class="acc-bal">${main}${sub}</div>
@@ -464,52 +727,18 @@
     const days = {};
     list.forEach((t) => { (days[t.date] = days[t.date] || []).push(t); });
     const dayKeys = Object.keys(days).sort().reverse();
-    return `${monthBar()}
-      <div class="flow">
-        <div><span>Masuk</span><strong class="pos">${money(s.income)}</strong></div>
-        <div><span>Keluar</span><strong class="neg">${money(s.expense)}</strong></div>
-        <div><span>Bil. transaksi</span><strong>${monthTx(ui.month).length}</strong></div>
+    return `
+      <div class="mini-stats">
+        <div><span>Masuk</span><strong class="pos money">${fmt(s.income)}</strong></div>
+        <div><span>Keluar</span><strong class="money">${fmt(s.expense)}</strong></div>
+        <div><span>Transaksi</span><strong>${monthTx(ui.month).length}</strong></div>
       </div>
-      <div class="search">${icon('search')}<input class="input" id="txSearch" type="search" placeholder="Cari nota, kategori, akaun" value="${esc(ui.search)}" autocomplete="off"></div>
+      <div class="search">${icon('search')}<input class="input" id="txSearch" type="search" placeholder="Cari nota, kategori, akaun, jumlah" value="${esc(ui.search)}" autocomplete="off"></div>
       ${dayKeys.length ? dayKeys.map((d) => {
         const out = days[d].filter((t) => t.type === 'expense').reduce((n, t) => n + num(t.amount), 0);
-        return `<div class="day-head"><span>${esc(dayLabel(d))}</span><span>${out ? '-' + money(out) : ''}</span></div>
+        return `<div class="day-head"><span>${esc(dayLabel(d))}</span><span class="money">${out ? '-' + fmt(out) : ''}</span></div>
           <div class="list">${days[d].map(txRow).join('')}</div>`;
       }).join('') : `<div class="empty" style="margin-top:16px">${q ? 'Tiada transaksi sepadan.' : `Tiada transaksi untuk ${esc(monthLabel(ui.month))}.`}</div>`}`;
-  }
-
-
-  function monthView() {
-    const commits = monthCommitments(ui.month);
-    const outs = commits.filter((x) => commitKind(x.c) !== 'income');
-    const total = outs.reduce((n, x) => n + (x.amount || 0), 0);
-    const paid = outs.filter((x) => x.tx).reduce((n, x) => n + num(x.tx.amount), 0);
-    const s = monthStats(ui.month);
-    const budgeted = categories('expense').filter((c) => num(c.budget));
-    const incomeCats = categories('income').filter((c) => s.cats[c.id]);
-    return `${monthBar()}
-      <div class="section" style="margin-top:14px">
-        <div class="section-head"><h2>Jadual bayaran</h2><button class="link-btn" data-act="manage-commit">Urus</button></div>
-        <div class="progress-line"><span>Dibayar ${money(paid)}</span><span>daripada ${money(total)}</span></div>
-        <div class="bar" style="margin-bottom:14px"><i style="width:${total ? Math.min(100, (paid / total) * 100) : 0}%;background:var(--sage)"></i></div>
-        ${commits.length ? timelineHtml(ui.month, commits) : '<div class="empty">Tiada komitmen aktif bulan ni.</div>'}
-      </div>
-      <div class="section">
-        <div class="section-head"><h2>Bajet kategori</h2><button class="link-btn" data-act="manage-budget">Ubah</button></div>
-        ${budgeted.length ? `<div class="list">${budgeted.map((c) => {
-          const sp = s.cats[c.id] || 0, bud = num(c.budget);
-          return `<div class="row" style="display:block">
-            <div style="display:flex;justify-content:space-between;gap:8px;margin-bottom:8px"><span><span style="margin-right:8px">${esc(c.icon)}</span><strong style="font-weight:600">${esc(c.name)}</strong></span>
-            <span class="${sp > bud ? 'neg' : ''}" style="font-variant-numeric:tabular-nums">${money(sp)} / ${money(bud)}</span></div>
-            <div class="bar ${sp > bud ? 'over' : ''}"><i style="width:${Math.min(100, (sp / bud) * 100)}%"></i></div></div>`;
-        }).join('')}</div>` : '<div class="empty">Belum ada bajet kategori.</div>'}
-      </div>
-      <div class="section">
-        <div class="section-head"><h2>Sumber pendapatan</h2><span class="aside">${money(s.income)}</span></div>
-        ${incomeCats.length ? `<div class="list">${incomeCats.map((c) => `<div class="row"><span class="row-ico">${esc(c.icon)}</span>
-          <span class="row-main"><span class="t">${esc(c.name)}</span><span class="s">${esc(c.group)}</span></span>
-          <span class="row-amt pos">${money(s.cats[c.id])}</span></div>`).join('')}</div>` : '<div class="empty">Belum ada pendapatan direkod bulan ni.</div>'}
-      </div>`;
   }
 
   function setupView() {
