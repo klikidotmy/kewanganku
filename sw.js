@@ -1,4 +1,4 @@
-const CACHE = 'kewanganku-v2.2.1';
+const CACHE = 'kewanganku-v2.3.0';
 const SHELL = ['./', 'index.html', 'styles.css', 'app.js', 'manifest.webmanifest', 'icons/icon-192.png', 'icons/icon-512.png', 'icons/apple-touch-icon.png'];
 
 self.addEventListener('install', (e) => {
@@ -17,6 +17,16 @@ self.addEventListener('fetch', (e) => {
 
   // Fonts: cache first.
   if (url.hostname === 'fonts.googleapis.com' || url.hostname === 'fonts.gstatic.com') {
+    e.respondWith(caches.match(req).then((hit) => hit || fetch(req).then((res) => {
+      const copy = res.clone();
+      caches.open(CACHE).then((c) => c.put(req, copy));
+      return res;
+    })));
+    return;
+  }
+
+  // Bank logos (site icons): cache first, they rarely change.
+  if (url.origin !== location.origin && req.destination === 'image') {
     e.respondWith(caches.match(req).then((hit) => hit || fetch(req).then((res) => {
       const copy = res.clone();
       caches.open(CACHE).then((c) => c.put(req, copy));

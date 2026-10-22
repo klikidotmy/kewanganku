@@ -157,8 +157,9 @@ main { padding: 14px 16px calc(var(--safe-b) + 104px); outline: none; max-width:
 .chips-row { display: flex; gap: 6px; flex-wrap: wrap; justify-content: flex-end; }
 .stat-chip { font-size: 11.5px; padding: 4px 9px; border-radius: 999px; background: var(--surface-2); color: var(--text-2); white-space: nowrap; }
 .stat-chip b { color: var(--text); }
-.grid-2 { display: grid; gap: 12px; }
-@media (min-width: 960px) { .grid-2 { grid-template-columns: 1fr 1fr; align-items: start; } .grid-2 > .section { margin-top: 26px; } }
+.grid-2 { display: grid; gap: 12px; grid-template-columns: minmax(0, 1fr); }
+.grid-2 > * { min-width: 0; }
+@media (min-width: 960px) { .grid-2 { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); align-items: start; } .grid-2 > .section { margin-top: 26px; } }
 
 /* ---------- sparkline KPI cards (trend) ---------- */
 .spark-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
@@ -277,7 +278,11 @@ main { padding: 14px 16px calc(var(--safe-b) + 104px); outline: none; max-width:
 .acc { text-align: left; background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); padding: 13px; min-height: 108px; display: flex; flex-direction: column; justify-content: space-between; box-shadow: var(--shadow); position: relative; overflow: hidden; }
 .acc::after { content: ""; position: absolute; left: 0; right: 0; bottom: 0; height: 3px; background: var(--acc, var(--bar)); opacity: .9; }
 .acc-head { display: flex; align-items: center; gap: 9px; }
-.acc-mono { width: 30px; height: 30px; border-radius: 9px; display: grid; place-items: center; font-weight: 800; font-size: 11.5px; color: #0B1530; background: var(--acc, var(--bar)); flex: none; }
+.acc-mono { width: 30px; height: 30px; border-radius: 9px; display: grid; place-items: center; font-weight: 800; font-size: 11.5px; color: #0B1530; background: var(--acc, var(--bar)); flex: none; position: relative; overflow: hidden; }
+.acc-mono img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: contain; background: #fff; padding: 3px; }
+.loan-name { display: flex; align-items: center; gap: 10px; min-width: 0; }
+.loan-name > span:last-child { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.loan-name .acc-mono { width: 26px; height: 26px; border-radius: 8px; font-size: 10px; }
 .acc-name { font-weight: 700; font-size: 13.5px; line-height: 1.2; min-width: 0; }
 .acc-name small { display: block; color: var(--muted); font-weight: 500; font-size: 11.5px; }
 .acc-bal { font-size: 17px; font-weight: 800; margin-top: 10px; }

@@ -2,7 +2,7 @@
 (() => {
   'use strict';
 
-  const VERSION = '2.2.1';
+  const VERSION = '2.3.0';
   const LS = { cfg: 'kk_cfg', data: 'kk_data', queue: 'kk_queue', ui: 'kk_ui' };
   const EXP_GROUPS = [
     ['Fixed', '🏛️'], ['Household', '🏠'], ['Telco', '📱'], ['Transport', '🚗'],
@@ -68,6 +68,9 @@
   const shiftMonth = (m, d) => { const [y, mo] = m.split('-').map(Number); const dt = new Date(y, mo - 1 + d, 1); return `${dt.getFullYear()}-${String(dt.getMonth() + 1).padStart(2, '0')}`; };
   const dayLabel = (s) => { const [y, m, d] = s.split('-').map(Number); const dt = new Date(y, m - 1, d); return `${DAYS[dt.getDay()]}, ${d} ${MON_S[m - 1]}`; };
   const initials = (name) => String(name).replace(/[^A-Za-z0-9 ]/g, ' ').trim().split(/\s+/).slice(0, 2).map((w) => w[0]).join('').toUpperCase() || '?';
+  // Account avatar: the bank's own site icon when a logo domain is set, initials underneath as the fallback.
+  const logoSrc = (d) => `https://www.google.com/s2/favicons?domain=${encodeURIComponent(String(d).trim())}&sz=128`;
+  const accMono = (a, cls) => `<span class="acc-mono ${cls || ''}" style="--acc:${esc((a && a.color) || '#4D8BFF')}">${a && a.logo ? `<img src="${esc(logoSrc(a.logo))}" alt="" loading="lazy" onerror="this.remove()">` : ''}${esc(initials((a && a.name) || '?'))}</span>`;
   const $ = (sel, root) => (root || document).querySelector(sel);
 
   let toastTimer;
@@ -459,7 +462,7 @@
         const owed = owedOf(a), lim = num(a.credit_limit);
         const pct = lim ? Math.min(100, (owed / lim) * 100) : 0;
         return `<button class="row credit-row" data-act="acc" data-id="${esc(a.id)}">
-          <span class="acc-mono" style="--acc:${esc(a.color || '#4D8BFF')}">${esc(initials(a.name))}</span>
+          ${accMono(a)}
           <span class="row-main"><span class="t">${esc(a.name)}</span>
             <span class="s">${lim ? `Baki had ${money(lim - owed)} · ${Math.round(pct)}%` : 'Hutang'}</span>
             ${lim ? `<span class="bar ${pct >= 80 ? 'over' : ''}"><i style="width:${pct}%"></i></span>` : ''}</span>
@@ -510,18 +513,18 @@
     if (!list.length) return '';
     const total = list.reduce((n, x) => n + x.owed, 0);
     return `<div class="section">
-      ${sectionHead('Ansuran', 'Progress pinjaman', 'Dikira ikut jadual ansuran', `<span class="aside neg money">${fmt(total)}</span>`)}
+      ${sectionHead('Ansuran', 'Progress pinjaman', 'Baki sebenar akaun, atau ikut jadual', `<span class="aside neg money">${fmt(total)}</span>`)}
       <div class="goals">${list.map((x) => {
         const [ny, nm] = x.nextMonth ? x.nextMonth.split('-').map(Number) : [0, 0];
         const next = x.nextMonth ? `${x.due ? `${x.due} ` : ''}${MON_S[nm - 1]} ${ny}` : '';
         return `<div class="goal loan-card">
-          <div class="goal-top"><h4>${esc(x.c.name)}</h4><span class="status good">${x.pct < 10 ? x.pct.toFixed(1) : Math.round(x.pct)}%</span></div>
+          <div class="goal-top"><h4 class="loan-name">${accMono(idx.acc[x.c.to_account_id] && idx.acc[x.c.to_account_id].logo ? idx.acc[x.c.to_account_id] : idx.acc[x.c.account_id])}<span>${esc(x.c.name)}</span></h4><span class="status good">${x.pct < 10 ? x.pct.toFixed(1) : Math.round(x.pct)}%</span></div>
           <div class="loan-fig"><span class="big money">${fmt(x.owed)}</span><span class="loan-of">${x.real ? 'baki akaun' : 'baki'} · ${x.left} bulan lagi</span></div>
           <div class="bar ok"><i style="width:${Math.min(100, x.pct)}%"></i></div>
           <div class="progress-line" style="margin:0"><span><b>${x.paid}</b>/${x.total} bulan dibayar</span><span>${money(x.amt)}/bulan</span></div>
           <div class="loan-stats">
             <div><small>Dah bayar</small><b class="money">${fmt(x.done)}</b></div>
-            <div><small>Bayaran seterusnya</small><b>${esc(next)}</b></div>
+            <div><small>Seterusnya</small><b>${esc(next)}</b></div>
             <div><small>${x.real && x.finish !== x.end ? 'Jangkaan tamat' : 'Tamat'}</small><b>${esc(monthLabel(x.finish))}</b><small>${x.real && x.finish !== x.end ? `Rasmi ${esc(monthLabel(x.end))}` : `${spanLabel(x.left)} lagi`}</small></div>
           </div>
         </div>`;
@@ -790,7 +793,7 @@
       sub = lim ? `<small>Baki had ${money(lim + bal)}</small>` : '<small>Hutang</small>';
     }
     return `<button class="acc" style="--acc:${esc(a.color || '#4D8BFF')}" data-act="acc" data-id="${esc(a.id)}">
-      <div class="acc-head"><span class="acc-mono">${esc(initials(a.name))}</span>
+      <div class="acc-head">${accMono(a)}
         <span class="acc-name">${esc(a.name)}${a.last4 ? `<small>•••• ${esc(a.last4)}</small>` : `<small>${esc(ACC_TYPES[a.type] || '')}</small>`}</span></div>
       <div class="acc-bal">${main}${sub}</div>
     </button>`;
@@ -1071,6 +1074,7 @@
         <label>${isNew ? 'Baki permulaan (hutang ditulis positif)' : 'Baki permulaan (sejak tarikh mula)'}<input class="input" id="fOpen" inputmode="decimal" value="${esc(Math.abs(num(a.opening_balance)))}"></label>
         <label>Had kredit (kad / PayLater)<input class="input" id="fLimit" inputmode="decimal" value="${esc(a.credit_limit === null ? '' : a.credit_limit)}"></label>
         <label>Warna<input class="input" id="fColor" type="color" value="${esc(a.color || '#D4AE68')}" style="height:46px;padding:4px"></label>
+        <label>Logo (alamat laman, contoh maybank2u.com.my)<input class="input" id="fLogo" value="${esc(a.logo || '')}" placeholder="Kosong = guna huruf" autocapitalize="off" autocorrect="off" spellcheck="false"></label>
         <label>Nota<input class="input" id="fNote" value="${esc(a.note)}" maxlength="120"></label>
       </div>
       ${isNew ? '' : '<p class="hint">Untuk betulkan baki semasa, guna "Kemas kini" pada akaun, bukan baki permulaan.</p>'}
@@ -1088,7 +1092,7 @@
         const row = Object.assign({}, a, {
           name, type, group, last4: $('#fLast4', sh).value.replace(/\D/g, '').slice(0, 4),
           opening_balance: group === 'credit' || group === 'borrowed' ? -open : open,
-          credit_limit: lim === '' ? '' : num(lim), color: $('#fColor', sh).value, note: $('#fNote', sh).value.trim()
+          credit_limit: lim === '' ? '' : num(lim), color: $('#fColor', sh).value, logo: $('#fLogo', sh).value.trim().replace(/^https?:\/\//, '').replace(/\/.*$/, ''), note: $('#fNote', sh).value.trim()
         });
         closeSheet();
         commit([{ op: 'upsert', tab: 'Accounts', row }], 'Akaun disimpan');
