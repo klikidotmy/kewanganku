@@ -195,6 +195,8 @@
     }
     return null;
   }
+  // The month a commitment payment counts for: for_month when set (early/late payments), else the transaction date.
+  function payMonth(t) { const f = String(t.for_month || '').slice(0, 7); return /^\d{4}-\d{2}$/.test(f) ? f : String(t.date).slice(0, 7); }
   function commitStatus(x, m) {
     if (x.tx) return { k: 'paid', label: `Selesai ${dayLabel(String(x.tx.date)).split(', ')[1]}` };
     if (x.amount === 0) return { k: 'paid', label: 'Tiada hutang' };
@@ -213,7 +215,7 @@
     return (data.commitments || []).filter((c) => c.active !== false &&
       (!c.start_month || String(c.start_month) <= m) && (!c.end_month || String(c.end_month) >= m))
       .map((c) => {
-        const tx = (data.transactions || []).find((t) => t.commitment_id === c.id && String(t.date).slice(0, 7) === m);
+        const tx = (data.transactions || []).find((t) => t.commitment_id === c.id && payMonth(t) === m);
         const x = { c, tx, amount: tx ? num(tx.amount) : commitAmount(c, bal) };
         x.status = commitStatus(x, m);
         return x;
@@ -509,7 +511,7 @@
     let paid = Math.max(0, Math.min(total, monthsBetween(start, cur)));
     let thisMonth = false;
     if (cur >= start && cur <= end) {
-      const tx = (data.transactions || []).some((t) => t.commitment_id === c.id && String(t.date).slice(0, 7) === cur);
+      const tx = (data.transactions || []).some((t) => t.commitment_id === c.id && payMonth(t) === cur);
       if (tx || (due && day >= due)) { paid += 1; thisMonth = true; }
     }
     paid = Math.min(total, paid);
@@ -944,7 +946,8 @@
       to_account_id: editing ? editing.to_account_id : (opts.to_account_id || ''),
       date: editing ? String(editing.date) : (opts.date || todayStr()),
       note: editing ? editing.note : (opts.note || ''),
-      commitment_id: editing ? editing.commitment_id : (opts.commitment_id || '')
+      commitment_id: editing ? editing.commitment_id : (opts.commitment_id || ''),
+      for_month: editing ? String(editing.for_month || '') : (opts.for_month || '')
     };
     const rank = usageRank();
     const accList = () => accounts().slice().sort((a, b) => (rank[b.id] || 0) - (rank[a.id] || 0) || num(a.order) - num(b.order));
@@ -1036,7 +1039,7 @@
           id: editing ? editing.id : uid('tx'), date: st.date, type: st.type, amount: amt,
           account_id: st.account_id, to_account_id: st.type === 'transfer' ? st.to_account_id : '',
           category_id: st.type === 'transfer' ? '' : st.category_id,
-          commitment_id: st.commitment_id || '', note: st.note, source: editing ? (editing.source || 'manual') : 'manual'
+          commitment_id: st.commitment_id || '', for_month: st.commitment_id ? (st.for_month || '') : '', note: st.note, source: editing ? (editing.source || 'manual') : 'manual'
         };
         ui.lastAccount = st.account_id;
         closeSheet();
@@ -1310,7 +1313,7 @@
         openTxSheet({
           type: kind, amount: amt || '', category_id: kind === 'transfer' ? '' : c.category_id,
           account_id: c.account_id || undefined, to_account_id: kind === 'transfer' ? c.to_account_id : '',
-          note: c.name, commitment_id: c.id, date
+          note: c.name, commitment_id: c.id, date, for_month: ui.month
         });
       }
     }
