@@ -13,6 +13,7 @@ PWA kewangan peribadi. Data disimpan dalam Google Sheet sendiri melalui Apps Scr
 - Kemas kini baki sebenar akaun (direkod sebagai pelarasan, bukan belanja)
 - Berfungsi offline: perubahan disimpan dan sync bila online semula
 - Mod privasi untuk kaburkan angka
+- Import penyata PDF (Maybank simpanan, UOB kad kredit): dibaca dalam pelayar dengan pdf.js (`vendor/pdfjs`), jumlah disemak dengan penyata, kategori dicadangkan dari peraturan (`importer.js`) dan rekod lepas. Baris yang dah ada (jumlah sama, tarikh ±2 hari) tak ditanda. Tiada data dihantar ke pihak luar.
 
 ## Setup backend (sekali sahaja)
 

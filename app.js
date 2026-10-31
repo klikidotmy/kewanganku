@@ -2,7 +2,7 @@
 (() => {
   'use strict';
 
-  const VERSION = '2.6.1';
+  const VERSION = '2.7.0';
   const LS = { cfg: 'kk_cfg', data: 'kk_data', queue: 'kk_queue', ui: 'kk_ui' };
   const EXP_GROUPS = [
     ['Fixed', '🏛️'], ['Household', '🏠'], ['Telco', '📱'], ['Transport', '🚗'],
@@ -31,7 +31,8 @@
     search: '<circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/>',
     x: '<path d="M18 6 6 18M6 6l12 12"/>',
     trend: '<path d="M3 17l6-6 4 4 8-8"/><path d="M14 7h7v7"/>',
-    target: '<circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="5"/><circle cx="12" cy="12" r="1.5"/>'
+    target: '<circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="5"/><circle cx="12" cy="12" r="1.5"/>',
+    upload: '<path d="M12 15V4M7 8.5 12 4l5 4.5"/><path d="M4 15v4a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-4"/>'
   };
   const icon = (name) => `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${ICONS[name]}</svg>`;
 
@@ -854,6 +855,7 @@
         <div><span>Keluar</span><strong class="money">${fmt(s.expense)}</strong></div>
         <div><span>Transaksi</span><strong>${monthTx(ui.month).length}</strong></div>
       </div>
+      ${cfg && cfg.demo ? '' : `<button class="import-cta" data-act="import">${icon('upload')}<span><strong>Import penyata PDF</strong><small>Maybank & UOB, kategori dicadangkan automatik</small></span>${icon('chevR')}</button>`}
       <div class="search">${icon('search')}<input class="input" id="txSearch" type="search" placeholder="Cari nota, kategori, akaun, jumlah" value="${esc(ui.search)}" autocomplete="off"></div>
       ${dayKeys.length ? dayKeys.map((d) => {
         const out = days[d].filter((t) => t.type === 'expense').reduce((n, t) => n + num(t.amount), 0);
@@ -1256,12 +1258,142 @@
     });
   }
 
+  /* ---------- statement import (PDF read on this device, see importer.js) ---------- */
+  function openImportSheet() {
+    if (cfg && cfg.demo) return toast('Import penyata perlukan sambungan ke Sheet');
+    openSheet(`${sheetHead('Import penyata')}
+      <div id="impBody">
+        <div class="note-box">Pilih PDF penyata <strong>Maybank</strong> (akaun simpanan) atau <strong>UOB</strong> (kad kredit). Fail dibaca dalam telefon ni sahaja, tak dihantar ke mana-mana.</div>
+        <label class="btn" style="margin-top:14px;cursor:pointer">Pilih fail PDF<input type="file" id="impFile" accept="application/pdf,.pdf" hidden></label>
+        <p class="hint">Lepas baca, app semak jumlah dengan penyata dan cadangkan kategori. Tiada apa disimpan sampai kau tekan Import.</p>
+      </div>`, (sh) => {
+      $('#impFile', sh).onchange = (e) => { const f = e.target.files && e.target.files[0]; if (f) readStatement(sh, f); };
+    });
+  }
+
+  async function readStatement(sh, file) {
+    const body = $('#impBody', sh);
+    body.innerHTML = '<div class="empty">Membaca penyata...</div>';
+    let st;
+    try {
+      if (!window.KKImport) throw new Error('Modul import belum dimuatkan. Muat semula app.');
+      st = await window.KKImport.readFile(file, (wrong) => window.prompt(wrong ? 'Kata laluan salah. Cuba lagi:' : 'PDF ni berkata laluan. Masukkan kata laluan:'));
+    } catch (e) {
+      const msg = /password/i.test(String(e && (e.name || e.message))) ? 'Kata laluan PDF tak dimasukkan.' : `Gagal baca PDF: ${esc(e && e.message || e)}`;
+      body.innerHTML = `<div class="note-box">${msg}</div><div class="btn-row one"><button class="btn ghost" id="impAgain">Cuba fail lain</button></div>`;
+      $('#impAgain', sh).onclick = openImportSheet;
+      return;
+    }
+    if (!st) {
+      body.innerHTML = '<div class="note-box">Format penyata ni belum disokong. Buat masa ni: Maybank (akaun simpanan) dan UOB (kad kredit).</div><div class="btn-row one"><button class="btn ghost" id="impAgain">Cuba fail lain</button></div>';
+      $('#impAgain', sh).onclick = openImportSheet;
+      return;
+    }
+    if (!idx.acc[st.account_id]) {
+      body.innerHTML = `<div class="note-box">Akaun ${esc(st.bankName)} (${esc(st.account_id)}) tak dijumpai dalam app.</div>`;
+      return;
+    }
+    const res = window.KKImport.classify(st, data);
+    renderImport(sh, st, res);
+  }
+
+  function renderImport(sh, st, res) {
+    const KK = window.KKImport;
+    const body = $('#impBody', sh);
+    const acc = idx.acc[st.account_id];
+    const items = res.items;
+    items.forEach((it) => { it.origSel = it.origSel || it.sel; });
+    const expCats = categories('expense'), incCats = categories('income');
+    const others = accounts().filter((a) => a.id !== st.account_id);
+    const options = (it) => {
+      const out = it.row.dir === 'out';
+      const cats = (out ? expCats : incCats).map((c) => [`cat:${c.id}`, `${c.icon} ${c.name}`]);
+      const tr = others.map((a) => [out ? `tr:${st.account_id}>${a.id}` : `tr:${a.id}>${st.account_id}`, `⇄ ${out ? 'Ke' : 'Dari'} ${a.name}`]);
+      tr.push([out ? `tr:${st.account_id}>` : `tr:>${st.account_id}`, `⇄ ${out ? 'Ke' : 'Dari'} akaun sendiri (tak pasti)`]);
+      if (st.bank === 'uob' && out && idx.acc.acc_tng) tr.unshift(['tng', '⇄ Topup TNG + caj 1%']);
+      const opt = (v, l) => `<option value="${esc(v)}" ${it.sel === v ? 'selected' : ''}>${esc(l)}</option>`;
+      return `<optgroup label="${out ? 'Belanja' : 'Masuk'}">${cats.map(([v, l]) => opt(v, l)).join('')}</optgroup>
+        <optgroup label="Pindah">${tr.map(([v, l]) => opt(v, l)).join('')}</optgroup>
+        <optgroup label="Lain">${opt('skip', 'Jangan rekod')}</optgroup>`;
+    };
+    const fmtD = (d) => dayLabel(d).split(', ')[1];
+    const rowHtml = (it, i) => `<div class="imp-row ${it.conf === 'semak' ? 'semak' : ''} ${it.include ? '' : 'off'}" data-i="${i}">
+        <label class="imp-tick"><input type="checkbox" data-inc="${i}" ${it.include ? 'checked' : ''} aria-label="Import baris ni"></label>
+        <div class="imp-main">
+          <div class="imp-top"><input class="imp-note" data-note="${i}" value="${esc(it.note)}" maxlength="120" aria-label="Nota"><span class="money ${it.row.dir === 'in' ? 'pos' : ''}">${it.row.dir === 'in' ? '+' : '-'}RM${fmtAbs(it.row.amount)}</span></div>
+          <div class="imp-raw">${esc(fmtD(it.row.date))} · ${esc(it.row.raw)}</div>
+          ${it.dup ? `<div class="imp-why dup">Dah ada: ${esc(it.dup.note || TX_LABEL[it.dup.type])}, ${esc(fmtD(String(it.dup.date)))}</div>` : `<div class="imp-why">${esc(it.why || '')}</div>`}
+          <select class="input imp-sel" data-sel="${i}">${options(it)}</select>
+        </div>
+      </div>`;
+    const groups = [
+      ['Perlu semak', items.filter((it) => it.include && it.conf === 'semak' && it.sel !== 'skip'), 'Cadangan terbaik app. Tukar kalau salah.'],
+      ['Dah ada dalam app', items.filter((it) => it.dup), 'Jumlah dan tarikh sama dengan transaksi sedia ada, jadi tak ditanda.'],
+      ['Auto', items.filter((it) => it.include && it.conf !== 'semak' && it.sel !== 'skip' && !it.dup), 'Ikut peraturan atau rekod lepas.'],
+      ['Tak direkod', items.filter((it) => !it.include && !it.dup), 'Contoh: bayaran kad yang dah direkod dari Maybank.']
+    ];
+    const seen = new Set();
+    const groupHtml = groups.map(([label, list, hint]) => {
+      list = list.filter((it) => !seen.has(it) && seen.add(it));
+      if (!list.length) return '';
+      return `<details class="imp-group" ${label === 'Perlu semak' ? 'open' : ''}><summary>${esc(label)} <span class="pill">${list.length}</span></summary>
+        <p class="hint" style="margin:0 2px 8px">${esc(hint)}</p>
+        <div class="list">${list.map((it) => rowHtml(it, items.indexOf(it))).join('')}</div></details>`;
+    }).join('');
+    const checks = st.checks.map((c) => `<div class="imp-check ${c.ok ? 'ok' : 'bad'}">${c.ok ? '✓' : '✗'} ${esc(c.label)}${c.ok || c.got == null ? '' : `: dapat RM${KK.fmt(c.got)}, penyata RM${c.want == null ? '?' : KK.fmt(c.want)}`}${c.detail ? ` (${esc(c.detail)})` : ''}</div>`).join('');
+    body.innerHTML = `
+      <div class="note-box">
+        <strong>${esc(acc.name)}</strong> · penyata ${esc(dayLabel(st.date).split(', ')[1])} ${esc(st.date.slice(0, 4))} · ${st.rows.length} baris
+        <div style="margin-top:8px">${checks}</div>
+      </div>
+      ${st.ok ? '' : '<div class="note-box bad-box" style="margin-top:10px">Jumlah tak sepadan dengan penyata, maksudnya ada baris yang tak terbaca dengan betul. Import disekat supaya data tak salah. Hantar PDF ni kepada Claude untuk dibaiki.</div>'}
+      ${res.already ? `<div class="note-box warn-box" style="margin-top:10px">Penyata ni pernah diimport (${res.already} rekod dengan sumber ${esc(res.source)}). Baris yang sepadan tak ditanda.</div>` : ''}
+      ${st.ok ? groupHtml : ''}
+      <div class="imp-foot">${st.ok ? '<button class="btn" id="impGo"></button>' : '<button class="btn ghost" id="impAgain">Cuba fail lain</button>'}</div>`;
+
+    const count = () => items.filter((it) => it.include && it.sel !== 'skip').reduce((n, it) => n + (it.sel === 'tng' ? 2 : 1), 0);
+    const refresh = () => { const b = $('#impGo', sh); if (b) { const n = count(); b.textContent = n ? `Import ${n} transaksi` : 'Tiada untuk diimport'; b.disabled = !n; } };
+    refresh();
+    const again = $('#impAgain', sh);
+    if (again) again.onclick = openImportSheet;
+    body.addEventListener('change', (e) => {
+      const t = e.target;
+      if (t.dataset.inc != null) { const it = items[+t.dataset.inc]; it.include = t.checked; t.closest('.imp-row').classList.toggle('off', !t.checked); }
+      if (t.dataset.sel != null) {
+        const it = items[+t.dataset.sel];
+        it.sel = t.value;
+        it.include = t.value !== 'skip';
+        const row = t.closest('.imp-row');
+        row.classList.toggle('off', !it.include);
+        row.classList.remove('semak');
+        $('[data-inc]', row).checked = it.include;
+      }
+      refresh();
+    });
+    body.addEventListener('input', (e) => { if (e.target.dataset.note != null) items[+e.target.dataset.note].note = e.target.value; });
+    const go = $('#impGo', sh);
+    if (go) go.onclick = () => {
+      const ops = [];
+      items.forEach((it) => {
+        if (!it.include || it.sel === 'skip') return;
+        const rows = KK.toTx(st, Object.assign({}, it, { note: String(it.note || '').trim(), commitment_id: it.sel === it.origSel ? it.commitment_id : '' }), res.source);
+        rows.forEach((row) => ops.push({ op: 'upsert', tab: 'Transactions', row }));
+      });
+      if (!ops.length) return;
+      closeSheet();
+      ui.tab = 'tx';
+      ui.month = st.period;
+      commit(ops, `${ops.length} transaksi diimport dari ${acc.name}`);
+    };
+  }
+
   function openSettings() {
     const demo = cfg && cfg.demo;
     openSheet(`${sheetHead('Tetapan')}
       <div class="note-box">${demo ? 'Mod demo. Data contoh disimpan dalam pelayar ni sahaja.' : `Disambung ke Apps Script.<br>${queue.length ? `<strong>${queue.length}</strong> perubahan menunggu sync.` : 'Semua perubahan dah sync.'}${syncError ? `<br>Ralat terakhir: ${esc(syncError)}` : ''}`}</div>
       <div class="form-grid" style="margin-top:14px">
         ${demo ? '' : '<button class="btn" id="sSync">Sync sekarang</button>'}
+        ${demo ? '' : '<button class="btn ghost" id="sImport">Import penyata (PDF)</button>'}
         <button class="btn ghost" id="sCsv">Eksport transaksi (CSV)</button>
         <button class="btn ghost" id="sDisc">${demo ? 'Keluar mod demo' : 'Tukar sambungan'}</button>
       </div>
@@ -1269,6 +1401,8 @@
       <p class="hint">baki. v${VERSION}</p>`, (sh) => {
       const s = $('#sSync', sh);
       if (s) s.onclick = () => { closeSheet(); sync().then(() => toast(syncError ? 'Sync gagal' : 'Sync selesai')); };
+      const im = $('#sImport', sh);
+      if (im) im.onclick = openImportSheet;
       $('#sCsv', sh).onclick = exportCsv;
       $('#sDisc', sh).onclick = () => {
         if (!demo && queue.length && !confirm(`${queue.length} perubahan belum sync akan hilang. Teruskan?`)) return;
@@ -1322,6 +1456,7 @@
     else if (act === 'manage-commit') openCommitManager();
     else if (act === 'manage-budget') openBudgetEditor();
     else if (act === 'group') openGroupSheet(a.dataset.g);
+    else if (act === 'import') openImportSheet();
   });
   document.addEventListener('input', (e) => {
     if (e.target.id === 'txSearch') {

@@ -393,3 +393,37 @@ body.private .money { filter: blur(7px); transition: filter .2s; }
 .pace.ahead i { background: #F2B14C; }
 .pace.over i { background: #F2696D; }
 .pace-pct { font-size: 13px; font-weight: 800; padding: 4px 9px; border-radius: 999px; background: rgba(255, 255, 255, .14); }
+
+/* ---------- statement import ---------- */
+.import-cta { display: flex; align-items: center; gap: 12px; width: 100%; text-align: left; padding: 12px 14px; margin-bottom: 12px; border-radius: var(--radius); background: var(--surface); border: 1px solid var(--line); box-shadow: var(--shadow); }
+.import-cta > svg:first-child { width: 22px; height: 22px; color: var(--bar); flex: none; }
+.import-cta > svg:last-child { width: 18px; height: 18px; color: var(--muted); flex: none; }
+.import-cta span { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+.import-cta small { font-size: 12px; color: var(--muted); }
+.imp-check { font-size: 12.5px; line-height: 1.5; }
+.imp-check.ok { color: var(--good); }
+.imp-check.bad { color: var(--bad); font-weight: 600; }
+.bad-box { color: var(--bad); background: var(--bad-bg); }
+.warn-box { background: color-mix(in srgb, #F2B14C 16%, var(--surface-2)); }
+.imp-group { margin-top: 14px; }
+.imp-group summary { cursor: pointer; font-weight: 700; font-size: 14px; padding: 6px 2px 8px; list-style: none; display: flex; align-items: center; gap: 8px; }
+.imp-group summary::-webkit-details-marker { display: none; }
+.imp-group summary::before { content: '▸'; color: var(--muted); transition: transform .15s; }
+.imp-group[open] summary::before { transform: rotate(90deg); }
+.imp-row { display: flex; gap: 10px; padding: 12px 12px 12px 10px; }
+.imp-row + .imp-row { border-top: 1px solid var(--line-2); }
+.imp-row.semak { box-shadow: inset 3px 0 0 #F2B14C; }
+.imp-row.off .imp-main { opacity: .45; }
+.imp-tick { padding-top: 6px; flex: none; }
+.imp-tick input { width: 18px; height: 18px; accent-color: var(--bar); }
+.imp-main { flex: 1; min-width: 0; display: grid; gap: 4px; }
+.imp-top { display: flex; align-items: center; gap: 8px; }
+.imp-note { flex: 1; min-width: 0; font-weight: 600; font-size: 14.5px; background: transparent; border: 0; border-bottom: 1px dashed transparent; color: var(--text); padding: 2px 0; outline: none; }
+.imp-note:focus { border-bottom-color: var(--bar); }
+.imp-top .money { flex: none; font-weight: 700; white-space: nowrap; }
+.imp-top .money.pos { color: var(--good); }
+.imp-raw { font-size: 11.5px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.imp-why { font-size: 11.5px; color: var(--text-2); }
+.imp-why.dup { color: var(--bar); font-weight: 600; }
+.imp-sel { padding: 9px 10px; font-size: 13.5px; margin-top: 2px; }
+.imp-foot { position: sticky; bottom: calc(-1 * (var(--safe-b) + 16px)); margin: 14px -16px 0; padding: 12px 16px calc(var(--safe-b) + 16px); background: linear-gradient(to top, var(--surface) 75%, transparent); }
