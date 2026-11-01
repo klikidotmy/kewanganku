@@ -13,12 +13,12 @@ const TABS = {
   Transactions: ['id', 'date', 'type', 'amount', 'account_id', 'to_account_id', 'category_id', 'commitment_id', 'note', 'source', 'created_at', 'updated_at'],
   Accounts: ['id', 'name', 'type', 'group', 'last4', 'opening_balance', 'credit_limit', 'color', 'order', 'archived', 'note'],
   Categories: ['id', 'name', 'kind', 'group', 'icon', 'budget', 'order', 'archived'],
-  Commitments: ['id', 'name', 'amount', 'due_day', 'category_id', 'account_id', 'start_month', 'end_month', 'active', 'note', 'kind', 'to_account_id'],
+  Commitments: ['id', 'name', 'amount', 'due_day', 'category_id', 'account_id', 'start_month', 'end_month', 'active', 'note', 'kind', 'to_account_id', 'partial'],
   Settings: ['key', 'value']
 };
 const TZ = 'Asia/Kuala_Lumpur';
 const NUMERIC = { amount: 1, opening_balance: 1, credit_limit: 1, order: 1, budget: 1, due_day: 1 };
-const BOOL = { archived: 1, active: 1 };
+const BOOL = { archived: 1, active: 1, partial: 1 };
 const TEXT_DATE = { date: 'yyyy-MM-dd', start_month: 'yyyy-MM', end_month: 'yyyy-MM' };
 
 function setup() {

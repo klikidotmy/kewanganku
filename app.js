@@ -2,7 +2,7 @@
 (() => {
   'use strict';
 
-  const VERSION = '2.8.0';
+  const VERSION = '2.9.0';
   const LS = { cfg: 'kk_cfg', data: 'kk_data', queue: 'kk_queue', ui: 'kk_ui' };
   const EXP_GROUPS = [
     ['Fixed', '🏛️'], ['Household', '🏠'], ['Telco', '📱'], ['Transport', '🚗'],
@@ -204,6 +204,9 @@
     const to = idx.acc[c.to_account_id];
     return !!(to && (to.group === 'credit' || to.group === 'borrowed'));
   }
+  // Fixed-amount commitments marked "boleh bayar sikit-sikit" (wife's allowance, parents) close once the parts add up.
+  const isOn = (v) => v === true || String(v).toUpperCase() === 'TRUE';
+  function partPay(c) { return isOn(c.partial) && commitKind(c) !== 'income' && num(c.amount) > 0; }
   function commitStatus(x, m) {
     if (x.partial) return { k: 'partial', label: `Dah bayar ${fmt(x.paid)}` };
     if (x.tx) return { k: 'paid', label: `Selesai ${dayLabel(String(x.tx.date)).split(', ')[1]}` };
@@ -232,6 +235,11 @@
           // Past months close once anything was paid; the current month stays open until the balance is cleared.
           const done = txs.length > 0 && (m < todayStr().slice(0, 7) || owed < 0.01);
           x = { c, txs, paid, owed, flex: true, partial: txs.length > 0 && !done, tx: done ? txs[txs.length - 1] : null, amount: done ? paid : owed };
+        } else if (partPay(c)) {
+          const target = num(c.amount);
+          const owed = round2(Math.max(0, target - paid));
+          const done = txs.length > 0 && (m < todayStr().slice(0, 7) || owed < 0.01);
+          x = { c, txs, paid, owed, target, flex: true, partial: txs.length > 0 && !done, tx: done ? txs[txs.length - 1] : null, amount: done ? paid : owed };
         } else {
           const tx = txs[0];
           x = { c, txs, paid, tx, amount: tx ? num(tx.amount) : commitAmount(c, bal) };
@@ -974,11 +982,12 @@
     let fresh = !!st.amount;
     const pi = !editing && opts.payInfo;
     const payBox = pi ? `<div class="pay-box">
-        <div class="pay-row"><span>Jumlah hutang sekarang</span><b class="money">${fmt(pi.owed)}</b></div>
+        <div class="pay-row"><span>${pi.target ? `Jumlah ${esc(shortMonth(st.for_month || todayStr().slice(0, 7)))}` : 'Jumlah hutang sekarang'}</span><b class="money">${fmt(pi.target || pi.owed)}</b></div>
         ${pi.paid > 0 ? `<div class="pay-row"><span>Dah bayar ${esc(shortMonth(st.for_month || todayStr().slice(0, 7)))}</span><b class="money pos">${fmt(pi.paid)}</b></div>
         <div class="pay-hist">${pi.txs.map((t) => `<button class="pay-tx" data-edit="${esc(t.id)}"><span>${esc(dayLabel(String(t.date)).split(', ')[1])}</span><span class="money">${fmt(num(t.amount))}</span></button>`).join('')}</div>` : ''}
-        ${pi.owed > 0.004 ? `<div class="pay-quick"><button class="chip" data-fill="${pi.owed}">Bayar penuh ${fmt(pi.owed)}</button></div>` : ''}
-        <div class="pay-hint">${pi.owed > 0.004 ? 'Masukkan berapa nak bayar sekarang. Baki boleh bayar lain kali.' : 'Tiada hutang.'}</div>
+        ${pi.target && pi.paid > 0 ? `<div class="pay-row"><span>Baki</span><b class="money">${fmt(pi.owed)}</b></div>` : ''}
+        ${pi.owed > 0.004 ? `<div class="pay-quick"><button class="chip" data-fill="${pi.owed}">${pi.target && pi.paid > 0 ? 'Bagi baki' : 'Bayar penuh'} ${fmt(pi.owed)}</button></div>` : ''}
+        <div class="pay-hint">${pi.owed > 0.004 ? 'Masukkan berapa nak bayar sekarang. Baki boleh bayar lain kali.' : (pi.target ? 'Dah cukup bulan ni. Rekod tambahan tetap dikira.' : 'Tiada hutang.')}</div>
       </div>` : '';
     const rank = usageRank();
     const accList = () => accounts().slice().sort((a, b) => (rank[b.id] || 0) - (rank[a.id] || 0) || num(a.order) - num(b.order));
@@ -1022,7 +1031,7 @@
         disp.innerHTML = `<span class="cur">RM</span>${pretty}`;
         disp.classList.toggle('zero', !num(st.amount));
         const left = $('#payLeft', sh);
-        if (pi && left) left.textContent = num(st.amount) > 0 && pi.owed > 0.004 ? (Math.abs(num(st.amount) - pi.owed) < 0.005 ? 'Lunas semua' : num(st.amount) > pi.owed ? `Lebih ${fmt(round2(num(st.amount) - pi.owed))} dari hutang` : `Baki lepas bayar: ${fmt(round2(pi.owed - num(st.amount)))}`) : '';
+        if (pi && left) left.textContent = num(st.amount) > 0 && pi.owed > 0.004 ? (Math.abs(num(st.amount) - pi.owed) < 0.005 ? (pi.target ? 'Cukup bulan ni' : 'Lunas semua') : num(st.amount) > pi.owed ? `Lebih ${fmt(round2(num(st.amount) - pi.owed))} dari ${pi.target ? 'jumlah' : 'hutang'}` : `Baki lepas bayar: ${fmt(round2(pi.owed - num(st.amount)))}`) : '';
       };
       const press = (k) => {
         if (fresh) { fresh = false; if (k !== 'del') st.amount = ''; }
@@ -1228,6 +1237,7 @@
         <label id="kCatL">Kategori<select class="input" id="kCat"></select></label>
         <label>Bulan mula (pilihan)<input class="input" id="kStart" type="month" value="${esc(c.start_month)}"></label>
         <label>Bulan akhir (pilihan, contoh ansuran)<input class="input" id="kEnd" type="month" value="${esc(c.end_month)}"></label>
+        <label class="tick-row" id="kPartL"><input type="checkbox" id="kPart" ${isOn(c.partial) ? 'checked' : ''}><span>Boleh bayar sikit-sikit<small>Kekal terbuka sampai jumlah sebulan cukup</small></span></label>
       </div>
       <div class="btn-row ${isNew ? 'one' : ''}">
         ${isNew ? '' : `<button class="btn danger" id="kToggle">${c.active === false ? 'Aktifkan' : 'Hentikan'}</button>`}
@@ -1237,6 +1247,7 @@
         const k = $('#kKind', sh).value;
         $('#kToL', sh).style.display = k === 'transfer' ? '' : 'none';
         $('#kCatL', sh).style.display = k === 'transfer' ? 'none' : '';
+        $('#kPartL', sh).style.display = k === 'income' ? 'none' : '';
         $('#kFromT', sh).textContent = k === 'transfer' ? 'Dari akaun' : k === 'income' ? 'Masuk ke akaun' : 'Bayar guna akaun';
         const want = k === 'income' ? 'income' : 'expense';
         const cat = $('#kCat', sh);
@@ -1256,7 +1267,8 @@
           name, kind: k, amount, due_day: day >= 1 && day <= 31 ? day : '',
           category_id: k === 'transfer' ? '' : $('#kCat', sh).value,
           account_id: $('#kAcc', sh).value, to_account_id: k === 'transfer' ? $('#kTo', sh).value : '',
-          start_month: $('#kStart', sh).value, end_month: $('#kEnd', sh).value
+          start_month: $('#kStart', sh).value, end_month: $('#kEnd', sh).value,
+          partial: k !== 'income' && $('#kPart', sh).checked
         });
         closeSheet();
         commit([{ op: 'upsert', tab: 'Commitments', row }], 'Komitmen disimpan');
@@ -1484,10 +1496,10 @@
         const now = todayStr();
         const date = now.slice(0, 7) === ui.month ? now : `${ui.month}-${String(Math.min(num(c.due_day) || 1, 28)).padStart(2, '0')}`;
         const kind = commitKind(c);
-        const x = flexPay(c) ? monthCommitments(ui.month).find((y) => y.c.id === c.id) : null;
+        const x = flexPay(c) || partPay(c) ? monthCommitments(ui.month).find((y) => y.c.id === c.id) : null;
         const amt = x ? '' : commitAmount(c);
         openTxSheet({
-          type: kind, amount: amt || '', payInfo: x ? { owed: x.owed, paid: x.paid, txs: x.txs } : null, category_id: kind === 'transfer' ? '' : c.category_id,
+          type: kind, amount: amt || '', payInfo: x ? { owed: x.owed, paid: x.paid, txs: x.txs, target: x.target || 0 } : null, category_id: kind === 'transfer' ? '' : c.category_id,
           account_id: c.account_id || undefined, to_account_id: kind === 'transfer' ? c.to_account_id : '',
           note: c.name, commitment_id: c.id, date, for_month: ui.month
         });
