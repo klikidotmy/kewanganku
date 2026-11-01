@@ -262,6 +262,17 @@ main { padding: 14px 16px calc(var(--safe-b) + 150px); outline: none; max-width:
 .st-overdue .tl-status { color: var(--bad); }
 .st-today .tl-dot { border-color: var(--bar); background: var(--brand-soft); }
 .st-today .tl-status { color: var(--bar); }
+.st-partial .tl-dot { border-color: var(--bar); background: linear-gradient(90deg, var(--bar) 50%, transparent 50%); }
+.st-partial .tl-status { color: var(--bar); }
+.pay-box { margin: 14px 0 0; padding: 12px 14px; border-radius: 14px; background: var(--surface-2); display: grid; gap: 8px; }
+.pay-row { display: flex; justify-content: space-between; align-items: baseline; font-size: 13.5px; color: var(--text-2); }
+.pay-row b { font-size: 16px; color: var(--text); }
+.pay-row b.pos { color: var(--good); }
+.pay-hist { display: flex; flex-wrap: wrap; gap: 6px; }
+.pay-tx { display: flex; gap: 6px; padding: 4px 8px; border-radius: 8px; font-size: 12px; color: var(--muted); border: 1px solid var(--line); background: none; }
+.pay-quick .chip { width: 100%; justify-content: center; }
+.pay-hint { font-size: 12px; color: var(--muted); }
+.pay-left { text-align: center; font-size: 13px; color: var(--muted); min-height: 18px; margin-bottom: 6px; }
 
 /* ---------- accounts ---------- */
 .acc-sum { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }

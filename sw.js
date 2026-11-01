@@ -1,4 +1,4 @@
-const CACHE = 'kewanganku-v2.7.0';
+const CACHE = 'kewanganku-v2.8.0';
 const SHELL = ['./', 'index.html', 'styles.css', 'importer.js', 'app.js', 'manifest.webmanifest', 'icons/baki-192.png', 'icons/baki-512.png', 'icons/baki-touch-180.png'];
 
 self.addEventListener('install', (e) => {

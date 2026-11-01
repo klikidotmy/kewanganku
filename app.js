@@ -2,7 +2,7 @@
 (() => {
   'use strict';
 
-  const VERSION = '2.7.0';
+  const VERSION = '2.8.0';
   const LS = { cfg: 'kk_cfg', data: 'kk_data', queue: 'kk_queue', ui: 'kk_ui' };
   const EXP_GROUPS = [
     ['Fixed', '🏛️'], ['Household', '🏠'], ['Telco', '📱'], ['Transport', '🚗'],
@@ -198,7 +198,14 @@
   }
   // The month a commitment payment counts for: for_month when set (early/late payments), else the transaction date.
   function payMonth(t) { const f = String(t.for_month || '').slice(0, 7); return /^\d{4}-\d{2}$/.test(f) ? f : String(t.date).slice(0, 7); }
+  // Card/loan payments with no fixed amount can be paid in parts: each payment is its own transaction.
+  function flexPay(c) {
+    if (num(c.amount) > 0 || commitKind(c) !== 'transfer') return false;
+    const to = idx.acc[c.to_account_id];
+    return !!(to && (to.group === 'credit' || to.group === 'borrowed'));
+  }
   function commitStatus(x, m) {
+    if (x.partial) return { k: 'partial', label: `Dah bayar ${fmt(x.paid)}` };
     if (x.tx) return { k: 'paid', label: `Selesai ${dayLabel(String(x.tx.date)).split(', ')[1]}` };
     if (x.amount === 0) return { k: 'paid', label: 'Tiada hutang' };
     const cur = todayStr().slice(0, 7);
@@ -216,8 +223,19 @@
     return (data.commitments || []).filter((c) => c.active !== false &&
       (!c.start_month || String(c.start_month) <= m) && (!c.end_month || String(c.end_month) >= m))
       .map((c) => {
-        const tx = (data.transactions || []).find((t) => t.commitment_id === c.id && payMonth(t) === m);
-        const x = { c, tx, amount: tx ? num(tx.amount) : commitAmount(c, bal) };
+        const txs = (data.transactions || []).filter((t) => t.commitment_id === c.id && payMonth(t) === m)
+          .sort((a, b) => String(a.date).localeCompare(String(b.date)));
+        const paid = round2(txs.reduce((n, t) => n + num(t.amount), 0));
+        let x;
+        if (flexPay(c)) {
+          const owed = commitAmount(c, bal) || 0;
+          // Past months close once anything was paid; the current month stays open until the balance is cleared.
+          const done = txs.length > 0 && (m < todayStr().slice(0, 7) || owed < 0.01);
+          x = { c, txs, paid, owed, flex: true, partial: txs.length > 0 && !done, tx: done ? txs[txs.length - 1] : null, amount: done ? paid : owed };
+        } else {
+          const tx = txs[0];
+          x = { c, txs, paid, tx, amount: tx ? num(tx.amount) : commitAmount(c, bal) };
+        }
         x.status = commitStatus(x, m);
         return x;
       })
@@ -583,7 +601,8 @@
     else if (kind === 'income') route = from ? `Masuk ${from.name}` : 'Pendapatan';
     else route = from ? from.name : ((idx.cat[c.category_id] || {}).name || '');
     const amt = x.amount === null ? `<span class="faint">${kind === 'income' ? 'Ikut gaji' : 'Isi jumlah'}</span>` : money(x.amount, kind === 'income', kind === 'income' ? 'pos' : '');
-    return `<button class="tl-item st-${status.k}" data-act="${tx ? 'edit-tx' : 'pay'}" data-id="${esc(tx ? tx.id : c.id)}">
+    const edit = tx && !x.flex;
+    return `<button class="tl-item st-${status.k}" data-act="${edit ? 'edit-tx' : 'pay'}" data-id="${esc(edit ? tx.id : c.id)}">
       <span class="tl-dot">${status.k === 'paid' ? icon('check') : ''}</span>
       <span class="row-main"><span class="t">${esc(c.name)}</span><span class="s">${esc(route)}</span></span>
       <span class="row-amt">${amt}<small class="tl-status">${esc(status.label)}</small></span>
@@ -730,8 +749,8 @@
     const m = ui.month;
     const commits = monthCommitments(m);
     const outs = commits.filter((x) => commitKind(x.c) !== 'income');
-    const total = outs.reduce((n, x) => n + (x.amount || 0), 0);
-    const paid = outs.filter((x) => x.tx).reduce((n, x) => n + num(x.tx.amount), 0);
+    const total = outs.reduce((n, x) => n + (x.partial ? x.paid + x.owed : (x.amount || 0)), 0);
+    const paid = outs.reduce((n, x) => n + (x.flex ? (x.tx || x.partial ? x.paid : 0) : (x.tx ? num(x.tx.amount) : 0)), 0);
     const s = monthStats(m);
     const budgeted = categories('expense').filter((c) => num(c.budget));
     const budTotal = budgeted.reduce((n, c) => n + num(c.budget), 0);
@@ -951,6 +970,16 @@
       commitment_id: editing ? editing.commitment_id : (opts.commitment_id || ''),
       for_month: editing ? String(editing.for_month || '') : (opts.for_month || '')
     };
+    // A prefilled amount is a suggestion: the first key typed replaces it instead of being blocked at 2 decimals.
+    let fresh = !!st.amount;
+    const pi = !editing && opts.payInfo;
+    const payBox = pi ? `<div class="pay-box">
+        <div class="pay-row"><span>Jumlah hutang sekarang</span><b class="money">${fmt(pi.owed)}</b></div>
+        ${pi.paid > 0 ? `<div class="pay-row"><span>Dah bayar ${esc(shortMonth(st.for_month || todayStr().slice(0, 7)))}</span><b class="money pos">${fmt(pi.paid)}</b></div>
+        <div class="pay-hist">${pi.txs.map((t) => `<button class="pay-tx" data-edit="${esc(t.id)}"><span>${esc(dayLabel(String(t.date)).split(', ')[1])}</span><span class="money">${fmt(num(t.amount))}</span></button>`).join('')}</div>` : ''}
+        ${pi.owed > 0.004 ? `<div class="pay-quick"><button class="chip" data-fill="${pi.owed}">Bayar penuh ${fmt(pi.owed)}</button></div>` : ''}
+        <div class="pay-hint">${pi.owed > 0.004 ? 'Masukkan berapa nak bayar sekarang. Baki boleh bayar lain kali.' : 'Tiada hutang.'}</div>
+      </div>` : '';
     const rank = usageRank();
     const accList = () => accounts().slice().sort((a, b) => (rank[b.id] || 0) - (rank[a.id] || 0) || num(a.order) - num(b.order));
     const catList = (kind) => categories(kind).slice().sort((a, b) => (rank[b.id] || 0) - (rank[a.id] || 0) || num(a.order) - num(b.order));
@@ -967,7 +996,9 @@
       <div class="seg" role="tablist">
         ${['expense', 'income', 'transfer'].map((t) => `<button data-v="${t}" class="${st.type === t ? 'on' : ''}">${TX_LABEL[t]}</button>`).join('')}
       </div>
+      ${payBox}
       <div class="amount-display" id="amtDisp"></div>
+      <div class="pay-left" id="payLeft"></div>
       <div id="txBody">${body()}</div>
       <div class="inline-fields">
         <input class="input" type="date" id="txDate" value="${esc(st.date)}" aria-label="Tarikh">
@@ -990,8 +1021,11 @@
         const pretty = Number(i || 0).toLocaleString('en-MY') + (d !== undefined ? '.' + d : '');
         disp.innerHTML = `<span class="cur">RM</span>${pretty}`;
         disp.classList.toggle('zero', !num(st.amount));
+        const left = $('#payLeft', sh);
+        if (pi && left) left.textContent = num(st.amount) > 0 && pi.owed > 0.004 ? (Math.abs(num(st.amount) - pi.owed) < 0.005 ? 'Lunas semua' : num(st.amount) > pi.owed ? `Lebih ${fmt(round2(num(st.amount) - pi.owed))} dari hutang` : `Baki lepas bayar: ${fmt(round2(pi.owed - num(st.amount)))}`) : '';
       };
       const press = (k) => {
+        if (fresh) { fresh = false; if (k !== 'del') st.amount = ''; }
         if (k === 'del') st.amount = st.amount.slice(0, -1);
         else if (k === '.') { if (!st.amount.includes('.')) st.amount = (st.amount || '0') + '.'; }
         else {
@@ -1004,6 +1038,13 @@
       };
       showAmt();
       $('#keypad', sh).onclick = (e) => { const b = e.target.closest('[data-k]'); if (b) press(b.dataset.k); };
+      const box = $('.pay-box', sh);
+      if (box) box.onclick = (e) => {
+        const f = e.target.closest('[data-fill]');
+        if (f) { st.amount = String(round2(num(f.dataset.fill))); fresh = false; showAmt(); return; }
+        const ed = e.target.closest('[data-edit]');
+        if (ed) { const t = data.transactions.find((y) => y.id === ed.dataset.edit); if (t) { closeSheet(); setTimeout(() => openTxSheet({ tx: t }), 0); } }
+      };
       sheetKeyHandler = (e) => {
         if (e.target.tagName === 'INPUT') return;
         if (/^[0-9]$/.test(e.key)) press(e.key);
@@ -1442,10 +1483,11 @@
       if (c) {
         const now = todayStr();
         const date = now.slice(0, 7) === ui.month ? now : `${ui.month}-${String(Math.min(num(c.due_day) || 1, 28)).padStart(2, '0')}`;
-        const amt = commitAmount(c);
         const kind = commitKind(c);
+        const x = flexPay(c) ? monthCommitments(ui.month).find((y) => y.c.id === c.id) : null;
+        const amt = x ? '' : commitAmount(c);
         openTxSheet({
-          type: kind, amount: amt || '', category_id: kind === 'transfer' ? '' : c.category_id,
+          type: kind, amount: amt || '', payInfo: x ? { owed: x.owed, paid: x.paid, txs: x.txs } : null, category_id: kind === 'transfer' ? '' : c.category_id,
           account_id: c.account_id || undefined, to_account_id: kind === 'transfer' ? c.to_account_id : '',
           note: c.name, commitment_id: c.id, date, for_month: ui.month
         });
