@@ -460,27 +460,30 @@
     const recent = monthTx(m).slice(0, 6);
 
     return `
-      <section class="hero">
-        <div class="hero-top">
-          <div><h2>Aliran duit bulan ini</h2>
-            <p>${esc(monthLabel(m))}, ${cur ? `hari ${day}/${dim}` : 'bulan penuh'}, semua akaun digabung</p></div>
-          <span class="live-chip">${cur ? '<i></i>Semasa' : 'Arkib'}</span>
-        </div>
-        <div class="kpi-grid">
-          <div class="kpi wide"><div class="kpi-row"><div class="kpi-main"><div class="kpi-label">Belanja</div><div class="kpi-value money">${fmt(s.expense)}</div></div>
-            <span class="pace-pct">${budgetTotal ? Math.round((s.expense / budgetTotal) * 100) : 0}%</span></div>
+      <section class="brief" aria-label="Ringkasan bulan">
+        <div class="brief-meta"><span>${esc(monthLabel(m))}, ${cur ? `hari ${day}/${dim}` : 'bulan penuh'}, semua akaun digabung</span>
+          <span class="live-chip">${cur ? '<i></i>Semasa' : 'Arkib'}</span></div>
+        <h2 class="brief-head">Aliran duit bulan ini</h2>
+        <div class="brief-body">
+          <div class="brief-left">
+            <div class="brief-label">${remain >= 0 ? 'Baki bajet' : 'Lebih bajet'}</div>
+            <div class="brief-fig">${money(Math.abs(remain))}</div>
+            <div class="brief-sub">${remain >= 0 && cur ? `boleh ${money(perDay)}/hari` : ''}</div>
             ${paceBar(s.expense, budgetTotal, cur ? day / dim : 1)}
-            <div class="kpi-sub">/ ${money(budgetTotal)} bajet ${pHas ? deltaPill(s.expense, p.expense, false, true) : ''}</div>
-            <div class="kpi-foot">${remain >= 0 ? `Baki bajet ${money(remain)}${cur ? `, boleh ${money(perDay)}/hari` : ''}` : `Lebih bajet ${money(-remain)}`}</div></div>
-          <div class="kpi"><div class="kpi-label">Masuk</div><div class="kpi-value money">${fmt(s.income)}</div>
-            <div class="kpi-sub">${pHas ? deltaPill(s.income, p.income, true, true) + ' vs ' + shortMonth(pm) : 'Gaji, komisen, affiliate'}</div>
-            <div class="kpi-foot">Baki bulan <span class="money">${fmt(s.income - s.expense, true)}</span></div></div>
-          <div class="kpi"><div class="kpi-label">Hutang kad & PayLater</div><div class="kpi-value money">${fmt(owed)}</div>
-            <div class="kpi-sub">/ ${money(lim)} had, ${lim ? Math.round((owed / lim) * 100) : 0}% guna</div>
-            <div class="seg-bar">${credit.filter((a) => (b[a.id] || 0) < 0).map((a) => `<i style="width:${lim ? (Math.max(0, -(b[a.id] || 0)) / lim) * 100 : 0}%;background:${esc(a.color || '#fff')}"></i>`).join('')}</div></div>
-          <div class="kpi wide"><div class="kpi-label">Bayaran bulan ini</div><div class="kpi-value">${paidN}<span style="font-size:15px;opacity:.7">/${outs.length}</span></div>
-            <div class="kpi-sub">selesai, simpanan <span class="money">${fmt(saving)}</span></div>
-            <div class="seg-bar"><i style="width:${outs.length ? (paidN / outs.length) * 100 : 0}%;background:#45C987"></i></div></div>
+            <div class="brief-spend"><span>Belanja ${money(s.expense)} / ${money(budgetTotal)} bajet</span>
+              <span class="brief-pct">${pHas ? deltaPill(s.expense, p.expense, false) : ''} <b class="pace-pct">${budgetTotal ? Math.round((s.expense / budgetTotal) * 100) : 0}%</b></span></div>
+          </div>
+          <dl class="brief-stats">
+            <div class="stat"><dt>Masuk</dt><dd>${money(s.income)}</dd>
+              <span class="stat-sub">${pHas ? deltaPill(s.income, p.income, true) + ' vs ' + shortMonth(pm) : 'Gaji, komisen, affiliate'}</span>
+              <span class="stat-foot">Baki bulan ${money(s.income - s.expense, true)}</span></div>
+            <div class="stat"><dt>Hutang kad & PayLater</dt><dd>${money(owed)}</dd>
+              <span class="stat-sub">/ ${money(lim)} had, ${lim ? Math.round((owed / lim) * 100) : 0}% guna</span>
+              <div class="seg-bar">${credit.filter((a) => (b[a.id] || 0) < 0).map((a) => `<i style="width:${lim ? (Math.max(0, -(b[a.id] || 0)) / lim) * 100 : 0}%;background:${esc(a.color || 'var(--muted)')}"></i>`).join('')}</div></div>
+            <div class="stat"><dt>Bayaran bulan ini</dt><dd>${paidN}<small>/${outs.length}</small></dd>
+              <span class="stat-sub">selesai, simpanan ${money(saving)}</span>
+              <div class="seg-bar"><i style="width:${outs.length ? (paidN / outs.length) * 100 : 0}%;background:var(--good)"></i></div></div>
+          </dl>
         </div>
       </section>
 

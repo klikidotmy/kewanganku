@@ -482,3 +482,47 @@ body.private .money { filter: blur(7px); transition: filter .2s; }
 .tick-row input { width: 20px; height: 20px; accent-color: var(--bar); flex: none; }
 .tick-row span { display: grid; gap: 2px; }
 .tick-row small { font-weight: 500; color: var(--muted); font-size: 12px; }
+
+/* ---------- ringkasan: the brief answers "what is left, what is due" without cards ---------- */
+.brief { padding: 4px 0 28px; border-bottom: 1px solid var(--line); }
+.brief-meta { display: flex; justify-content: space-between; align-items: center; gap: 12px; font-size: 13px; color: var(--text-2); }
+.brief .live-chip { background: var(--surface-2); color: var(--text-2); }
+.brief-head { font-size: 18px; font-weight: 700; margin: 12px 0 0; }
+.brief-body { display: grid; grid-template-columns: minmax(0, 1fr); gap: 20px; margin-top: 16px; }
+.brief-left { min-width: 0; }
+.brief-label { font-size: 14px; color: var(--text-2); }
+.brief-fig { font-size: 48px; line-height: 1; font-weight: 800; letter-spacing: -.03em; margin-top: 4px; min-width: 0; overflow-wrap: break-word; font-variant-numeric: tabular-nums; }
+.brief-sub { font-size: 15px; color: var(--text-2); margin-top: 8px; min-height: 1lh; }
+.brief .pace { height: 8px; background: var(--surface-2); margin: 16px 0 8px; }
+.brief .pace i { background: var(--bar); }
+.brief .pace u { background: var(--text); }
+.brief .pace.ahead i { background: var(--amber); }
+.brief .pace.over i { background: var(--coral); }
+.brief-spend { display: flex; justify-content: space-between; align-items: center; gap: 4px 12px; flex-wrap: wrap; font-size: 13px; color: var(--text-2); }
+.brief-pct { display: inline-flex; align-items: center; gap: 8px; }
+.brief .pace-pct { background: none; padding: 0; font-size: 13px; color: var(--text); }
+.brief-stats { display: grid; margin: 0; }
+.stat { display: grid; grid-template-columns: 1fr auto; align-items: baseline; column-gap: 12px; padding: 12px 0; border-top: 1px solid var(--line-2); }
+.stat dt { font-size: 13px; color: var(--text-2); min-width: 0; }
+.stat dd { margin: 0; font-size: 20px; font-weight: 800; text-align: right; white-space: nowrap; font-variant-numeric: tabular-nums; }
+.stat dd small { font-size: 14px; font-weight: 600; color: var(--muted); }
+.stat-sub, .stat-foot { font-size: 12px; color: var(--muted); display: inline-flex; align-items: center; flex-wrap: wrap; gap: 4px 8px; }
+.stat-sub { grid-column: 1; }
+.stat-foot { grid-column: 2; justify-self: end; }
+.stat .seg-bar { grid-column: 1 / -1; margin-top: 8px; background: var(--surface-2); }
+@media (min-width: 960px) {
+  .brief-body { grid-template-columns: minmax(0, 1.2fr) minmax(0, 1fr); gap: 48px; align-items: start; }
+  .brief-fig { font-size: 64px; }
+  .brief-stats .stat:first-child { border-top: 0; padding-top: 0; }
+}
+@media (max-width: 719.98px) {
+  .brief { padding-bottom: 12px; }
+  .brief-head { margin-top: 8px; font-size: 16px; }
+  .brief-body { gap: 8px; margin-top: 8px; }
+  .brief-fig { font-size: 44px; }
+  .brief-sub { margin-top: 4px; }
+  .brief .pace { margin: 10px 0 6px; }
+  .stat { padding: 8px 0; }
+  .stat .seg-bar { margin-top: 6px; }
+  .brief + .grid-2 > .section { margin-top: 20px; }
+}
