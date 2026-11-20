@@ -370,8 +370,9 @@
     const pts = vals.map((v, i) => ({ v, i })).filter((p) => p.v !== null);
     if (pts.length < 2) return `<svg viewBox="0 0 200 46"></svg>`;
     const min = Math.min(...pts.map((p) => p.v)), max = Math.max(...pts.map((p) => p.v));
-    const span = max - min || 1, n = vals.length - 1;
-    const xy = pts.map((p) => [(p.i / n) * 200, 40 - ((p.v - min) / span) * 30]);
+    const span = max - min || 1;
+    const first = pts[0].i, run = pts[pts.length - 1].i - first || 1;
+    const xy = pts.map((p) => [((p.i - first) / run) * 200, 40 - ((p.v - min) / span) * 30]);
     const line = xy.map((p, i) => `${i ? 'L' : 'M'}${p[0].toFixed(1)} ${p[1].toFixed(1)}`).join('');
     const area = `${line}L${xy[xy.length - 1][0].toFixed(1)} 46L${xy[0][0].toFixed(1)} 46Z`;
     const last = xy[xy.length - 1];
@@ -1520,6 +1521,18 @@
     }
   });
   $('#addBtn').onclick = () => { if (data) openTxSheet(); };
+  /* the add button steps aside while scrolling down so it never covers amounts, and returns on scroll up */
+  {
+    const fab = $('#addBtn');
+    document.documentElement.classList.add('js');
+    let lastY = window.scrollY;
+    window.addEventListener('scroll', () => {
+      const y = window.scrollY;
+      if (y <= 120 || y < lastY - 4) fab.classList.remove('away');
+      else if (y > lastY + 4) fab.classList.add('away');
+      lastY = y;
+    }, { passive: true });
+  }
   $('#settingsBtn').onclick = () => { if (data) openSettings(); };
   $('#privacyBtn').onclick = () => { ui.private = !ui.private; render(); };
   $('#settingsBtn').innerHTML = icon('gear');
