@@ -110,18 +110,20 @@ h1, h2, h3 { margin: 0; letter-spacing: -.01em; text-wrap: balance; }
 .sync-state .dot { width: 7px; height: 7px; border-radius: 50%; background: var(--good); }
 .sync-state.pending .dot { background: var(--warn); }
 .sync-state.error .dot { background: var(--bad); }
-main { padding: 14px 16px calc(var(--safe-b) + 150px); outline: none; max-width: 1180px; }
+main { padding: 14px 16px calc(var(--safe-b) + 96px); outline: none; max-width: 1180px; }
 .setup-mode .tabbar, .setup-mode .fab, .setup-mode .month-pick, .setup-mode #privacyBtn, .setup-mode #settingsBtn { display: none !important; }
 
 .tabbar { position: fixed; left: 0; right: 0; bottom: 0; z-index: 30; display: grid; grid-template-columns: repeat(5, 1fr); padding: 6px 6px calc(var(--safe-b) + 6px); background: color-mix(in srgb, var(--surface) 92%, transparent); -webkit-backdrop-filter: blur(16px); backdrop-filter: blur(16px); border-top: 1px solid var(--line); }
 .tabbar .tab { display: flex; flex-direction: column; align-items: center; gap: 3px; padding: 6px 0; font-size: 10.5px; font-weight: 600; color: var(--muted); border-radius: 12px; }
 .tabbar .tab svg { width: 21px; height: 21px; }
 .tabbar .tab.active { color: var(--bar); }
-.fab { position: fixed; right: 16px; bottom: calc(var(--safe-b) + 78px); z-index: 31; width: 56px; height: 56px; border-radius: 18px; display: grid; place-items: center; color: var(--white); background: var(--brand-fill); box-shadow: 0 10px 24px -6px var(--brand-glow); }
+.tabbar .tab[data-tab="tx"] { display: none; }
+.tabbar .tab[data-tab="plan"] { grid-column: 4; }
+.tabbar .tab[data-tab="accounts"] { grid-column: 5; }
+.fab { position: fixed; left: calc(50% - 26px); bottom: calc(var(--safe-b) + 10px); z-index: 31; width: 52px; height: 52px; border-radius: 16px; display: grid; place-items: center; color: var(--white); background: var(--brand-fill); box-shadow: 0 10px 24px -6px var(--brand-glow); }
 .fab svg { width: 26px; height: 26px; }
-.fab { transition: transform .2s, opacity .2s, visibility .2s; }
+.fab { transition: transform .12s; }
 .fab:active { transform: scale(.96); }
-.js .fab.away { transform: translateY(24px) scale(.9); opacity: 0; visibility: hidden; pointer-events: none; }
 .btn:active { transform: scale(.98); }
 
 @media (min-width: 960px) {
@@ -138,7 +140,9 @@ main { padding: 14px 16px calc(var(--safe-b) + 150px); outline: none; max-width:
   .topbar { padding: 18px 28px 14px; }
   .topbar h1 { font-size: 22px; }
   main { padding: 20px 28px 60px; }
-  .fab { bottom: 28px; right: 28px; }
+  .fab { left: 12px; bottom: 20px; width: calc(var(--side-w) - 24px); height: 44px; border-radius: 14px; display: flex; gap: 8px; align-items: center; justify-content: center; font-weight: 700; font-size: 14px; box-shadow: none; }
+  .fab::after { content: 'Tambah transaksi'; }
+  .fab svg { width: 20px; height: 20px; }
 }
 
 /* ---------- typography helpers ---------- */

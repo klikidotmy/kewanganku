@@ -424,7 +424,7 @@
     if (!cfg || !data) { app.classList.add('setup-mode'); $('#pageTitle').textContent = 'baki.'; view.innerHTML = setupView(); bindSetup(); return; }
     app.classList.remove('setup-mode');
     if (!TITLES[ui.tab]) ui.tab = 'home';
-    document.querySelectorAll('.tab').forEach((b) => b.classList.toggle('active', b.dataset.tab === ui.tab));
+    document.querySelectorAll('.tab').forEach((b) => b.classList.toggle('active', b.dataset.tab === ui.tab || (ui.tab === 'tx' && b.dataset.tab === 'home' && !!b.closest('.tabbar'))));
     app.dataset.tab = ui.tab;
     $('#pageTitle').textContent = TITLES[ui.tab];
     $('#monthLabel').textContent = `${shortMonth(ui.month)} ${ui.month.slice(0, 4)}`;
@@ -1524,18 +1524,6 @@
     }
   });
   $('#addBtn').onclick = () => { if (data) openTxSheet(); };
-  /* the add button steps aside while scrolling down so it never covers amounts, and returns on scroll up */
-  {
-    const fab = $('#addBtn');
-    document.documentElement.classList.add('js');
-    let lastY = window.scrollY;
-    window.addEventListener('scroll', () => {
-      const y = window.scrollY;
-      if (y <= 120 || y < lastY - 4) fab.classList.remove('away');
-      else if (y > lastY + 4) fab.classList.add('away');
-      lastY = y;
-    }, { passive: true });
-  }
   $('#settingsBtn').onclick = () => { if (data) openSettings(); };
   $('#privacyBtn').onclick = () => { ui.private = !ui.private; render(); };
   $('#settingsBtn').innerHTML = icon('gear');
