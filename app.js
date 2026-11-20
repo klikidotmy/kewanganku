@@ -433,8 +433,8 @@
     save(LS.ui, ui);
   }
 
-  function sectionHead(eyebrow, title, sub, aside) {
-    return `<div class="section-head"><div>${eyebrow ? `<div class="eyebrow">${eyebrow}</div>` : ''}<h2>${title}</h2>${sub ? `<p>${sub}</p>` : ''}</div>${aside || ''}</div>`;
+  function sectionHead(_name, title, sub, aside) {
+    return `<div class="section-head"><div><h2>${title}</h2>${sub ? `<p>${sub}</p>` : ''}</div>${aside || ''}</div>`;
   }
 
   function homeView() {
@@ -461,25 +461,24 @@
     return `
       <section class="hero">
         <div class="hero-top">
-          <div><div class="eyebrow">${cur ? 'Bulan semasa' : 'Bulan dipilih'} · ${esc(monthLabel(m))}</div>
-            <h2>Aliran duit bulan ini</h2>
-            <p>${cur ? `Hari ${day}/${dim}` : 'Bulan penuh'} · semua akaun digabung</p></div>
+          <div><h2>Aliran duit bulan ini</h2>
+            <p>${esc(monthLabel(m))}, ${cur ? `hari ${day}/${dim}` : 'bulan penuh'}, semua akaun digabung</p></div>
           <span class="live-chip">${cur ? '<i></i>Semasa' : 'Arkib'}</span>
         </div>
         <div class="kpi-grid">
-          <div class="kpi wide"><div class="kpi-row"><div style="flex:1;min-width:0"><div class="kpi-label">Belanja</div><div class="kpi-value money">${fmt(s.expense)}</div></div>
+          <div class="kpi wide"><div class="kpi-row"><div class="kpi-main"><div class="kpi-label">Belanja</div><div class="kpi-value money">${fmt(s.expense)}</div></div>
             <span class="pace-pct">${budgetTotal ? Math.round((s.expense / budgetTotal) * 100) : 0}%</span></div>
             ${paceBar(s.expense, budgetTotal, cur ? day / dim : 1)}
             <div class="kpi-sub">/ ${money(budgetTotal)} bajet ${pHas ? deltaPill(s.expense, p.expense, false, true) : ''}</div>
-            <div class="kpi-foot">${remain >= 0 ? `Baki bajet ${money(remain)}${cur ? ` · boleh ${money(perDay)}/hari` : ''}` : `Lebih bajet ${money(-remain)}`}</div></div>
+            <div class="kpi-foot">${remain >= 0 ? `Baki bajet ${money(remain)}${cur ? `, boleh ${money(perDay)}/hari` : ''}` : `Lebih bajet ${money(-remain)}`}</div></div>
           <div class="kpi"><div class="kpi-label">Masuk</div><div class="kpi-value money">${fmt(s.income)}</div>
             <div class="kpi-sub">${pHas ? deltaPill(s.income, p.income, true, true) + ' vs ' + shortMonth(pm) : 'Gaji, komisen, affiliate'}</div>
             <div class="kpi-foot">Baki bulan <span class="money">${fmt(s.income - s.expense, true)}</span></div></div>
           <div class="kpi"><div class="kpi-label">Hutang kad & PayLater</div><div class="kpi-value money">${fmt(owed)}</div>
-            <div class="kpi-sub">/ ${money(lim)} had · ${lim ? Math.round((owed / lim) * 100) : 0}% guna</div>
+            <div class="kpi-sub">/ ${money(lim)} had, ${lim ? Math.round((owed / lim) * 100) : 0}% guna</div>
             <div class="seg-bar">${credit.filter((a) => (b[a.id] || 0) < 0).map((a) => `<i style="width:${lim ? (Math.max(0, -(b[a.id] || 0)) / lim) * 100 : 0}%;background:${esc(a.color || '#fff')}"></i>`).join('')}</div></div>
           <div class="kpi wide"><div class="kpi-label">Bayaran bulan ini</div><div class="kpi-value">${paidN}<span style="font-size:15px;opacity:.7">/${outs.length}</span></div>
-            <div class="kpi-sub">selesai · simpanan <span class="money">${fmt(saving)}</span></div>
+            <div class="kpi-sub">selesai, simpanan <span class="money">${fmt(saving)}</span></div>
             <div class="seg-bar"><i style="width:${outs.length ? (paidN / outs.length) * 100 : 0}%;background:#45C987"></i></div></div>
         </div>
       </section>
@@ -516,7 +515,7 @@
         return `<button class="row credit-row" data-act="acc" data-id="${esc(a.id)}">
           ${accMono(a)}
           <span class="row-main"><span class="t">${esc(a.name)}</span>
-            <span class="s">${lim ? `Baki had ${money(lim - owed)} · ${Math.round(pct)}%` : 'Hutang'}</span>
+            <span class="s">${lim ? `Baki had ${money(lim - owed)}, ${Math.round(pct)}%` : 'Hutang'}</span>
             ${lim ? `<span class="bar ${pct >= 80 ? 'over' : ''}"><i style="width:${pct}%"></i></span>` : ''}</span>
           <span class="row-amt">${money(owed)}</span>
         </button>`;
@@ -574,9 +573,9 @@
         return `<div class="row loan-row">
           ${accMono(acc)}
           <span class="row-main"><span class="t">${esc(x.c.name)}</span>
-            <span class="s">${x.paid}/${x.total} bln · habis ${endLbl}</span>
+            <span class="s">${x.paid}/${x.total} bln, habis ${endLbl}</span>
             <span class="bar ok"><i style="width:${Math.min(100, x.pct)}%"></i></span></span>
-          <span class="row-amt"><span class="money">${fmt(x.owed)}</span><small>${next ? `${esc(next)} · ` : ''}${fmtShort(x.amt)}</small></span>
+          <span class="row-amt"><span class="money">${fmt(x.owed)}</span><small>${next ? `${esc(next)}, ` : ''}${fmtShort(x.amt)}</small></span>
         </div>`;
       }).join('')}</div>
     </div>`;
@@ -627,7 +626,7 @@
     if (t.type === 'income') { cls = 'pos'; sign = '+'; }
     if (t.type === 'transfer') { ico = '⇄'; title = t.note || `Pindah ke ${to ? to.name : '?'}`; sub = `${acc ? acc.name : '?'} → ${to ? to.name : '?'}`; cls = 'faint'; }
     if (t.type === 'adjust') { ico = '⚖️'; title = t.note || 'Pelarasan baki'; sign = num(t.amount) >= 0 ? '+' : '-'; cls = 'faint'; }
-    if (cat && t.note && t.type !== 'transfer') sub = `${cat.name} · ${sub}`;
+    if (cat && t.note && t.type !== 'transfer') sub = `${cat.name}, ${sub}`;
     return `<button class="row" data-act="edit-tx" data-id="${esc(t.id)}">
       <span class="row-ico">${esc(ico)}</span>
       <span class="row-main"><span class="t">${esc(title)}</span><span class="s">${esc(sub)}</span></span>
@@ -661,7 +660,7 @@
     }).filter((r) => r.now || r.av).sort((a, b) => b.now - a.now).slice(0, 10);
 
     return `
-      ${sectionHead(`${N} bulan terakhir · sehingga ${esc(monthLabel(ui.month))}`, 'Trend bulanan', `Perbandingan ${esc(monthLabel(cur.m))} dengan ${esc(monthLabel(prev.m))}.${isCurMonth(ui.month) ? ' Bulan semasa belum lengkap.' : ''}`)}
+      ${sectionHead('', 'Trend bulanan', `${N} bulan terakhir sehingga ${esc(monthLabel(ui.month))}. Perbandingan ${esc(monthLabel(cur.m))} dengan ${esc(monthLabel(prev.m))}.${isCurMonth(ui.month) ? ' Bulan semasa belum lengkap.' : ''}`)}
       <div class="spark-grid">${cards.map(([label, k, upGood, color, sub], i) => `
         <div class="spark-card ${i === 0 ? 'feature' : ''}">
           <div class="lbl"><span>${label}</span>${prev.has && cur.has ? deltaPill(cur[k], prev[k], upGood, false) : ''}</div>
@@ -672,7 +671,7 @@
       </div>
 
       <div class="section"><div class="card">
-        <div class="card-head"><div><div class="eyebrow">Aliran tunai</div><h3>Masuk vs keluar</h3></div>
+        <div class="card-head"><div><h3>Aliran tunai: masuk vs keluar</h3></div>
           <div class="chips-row">${best ? `<span class="stat-chip">Terbaik <b>${shortMonth(best.m)}</b> <span class="money">${fmtShort(best.net)}</span></span>` : ''}<span class="stat-chip">Purata keluar <b class="money">${fmtShort(avg('expense'))}</b></span></div></div>
         <div class="legend"><span><i style="background:#4D8BFF"></i>Masuk</span><span><i style="background:#F08A50"></i>Keluar</span></div>
         ${barChart(ser.map((x) => ({ label: shortMonth(x.m), cur: x.m === ui.month, has: x.has, groups: [[{ v: x.income, color: '#4D8BFF', name: 'masuk' }], [{ v: x.expense, color: '#F08A50', name: 'keluar' }]] })), { label: 'Masuk vs keluar ikut bulan' })}
@@ -681,12 +680,12 @@
 
       <div class="grid-2">
         <div class="section"><div class="card">
-          <div class="card-head"><div><div class="eyebrow">Belanja</div><h3>Ikut kumpulan</h3></div><span class="stat-chip">Purata <b class="money">${fmtShort(avg('expense'))}</b></span></div>
+          <div class="card-head"><div><h3>Belanja ikut kumpulan</h3></div><span class="stat-chip">Purata <b class="money">${fmtShort(avg('expense'))}</b></span></div>
           <div class="legend">${EXP_GROUPS.filter(([g]) => ser.some((x) => x.groups[g])).map(([g]) => `<span><i style="background:${GROUP_COLORS[g]}"></i>${esc(g)}</span>`).join('')}</div>
           ${barChart(ser.map((x) => ({ label: shortMonth(x.m), cur: x.m === ui.month, has: x.has, groups: [EXP_GROUPS.map(([g]) => ({ v: x.groups[g] || 0, color: GROUP_COLORS[g], name: g }))] })), { label: 'Belanja ikut kumpulan', valueLabel: true })}
         </div></div>
         <div class="section"><div class="card">
-          <div class="card-head"><div><div class="eyebrow">Pendapatan</div><h3>Ikut sumber</h3></div><span class="stat-chip">Purata <b class="money">${fmtShort(avg('income'))}</b></span></div>
+          <div class="card-head"><div><h3>Pendapatan ikut sumber</h3></div><span class="stat-chip">Purata <b class="money">${fmtShort(avg('income'))}</b></span></div>
           <div class="legend">${incUsed.map((c) => `<span><i style="background:${incColor[c.id]}"></i>${esc(c.name)}</span>`).join('')}</div>
           ${barChart(ser.map((x) => ({ label: shortMonth(x.m), cur: x.m === ui.month, has: x.has, groups: [incUsed.map((c) => ({ v: x.cats[c.id] || 0, color: incColor[c.id], name: c.name }))] })), { label: 'Pendapatan ikut sumber', valueLabel: true })}
         </div></div>
@@ -776,7 +775,7 @@
         </div>`).join('')}
       </div>
       <div class="card" style="margin-top:12px">
-        <div class="eyebrow">Peraturan duit</div>
+        <div class="card-head"><h3>Peraturan duit</h3></div>
         <ul class="rules">
           <li><span class="n">1</span><span><b>Gaji + komisen KLIKI</b> untuk komitmen tetap: loan, PTPTN, bil, isteri, Coway.</span></li>
           <li><span class="n">2</span><span><b>Komisen affiliate</b> untuk belanja harian dan bayar baki PayLater.</span></li>
@@ -785,14 +784,14 @@
       </div>
 
       <div class="section">
-        ${sectionHead(esc(monthLabel(m)), 'Jadual bayaran', '', `<button class="link-btn" data-act="manage-commit">Urus</button>`)}
+        ${sectionHead('', 'Jadual bayaran', esc(monthLabel(m)), `<button class="link-btn" data-act="manage-commit">Urus</button>`)}
         <div class="progress-line"><span>Dibayar <b class="money">${fmt(paid)}</b></span><span>daripada <span class="money">${fmt(total)}</span></span></div>
         <div class="bar ok" style="margin-bottom:14px"><i style="width:${total ? Math.min(100, (paid / total) * 100) : 0}%"></i></div>
         ${commits.length ? timelineHtml(m, commits) : '<div class="empty">Tiada komitmen aktif bulan ni.</div>'}
       </div>
 
       <div class="section">
-        ${sectionHead('Belanja', 'Ikut kumpulan', 'Garis kecil = bajet kumpulan', `<span class="aside">${money(s.expense)}</span>`)}
+        ${sectionHead('', 'Belanja ikut kumpulan', 'Garis kecil = bajet kumpulan', `<span class="aside">${money(s.expense)}</span>`)}
         <div class="card"><div class="rank">${EXP_GROUPS.map(([g, e]) => {
           const v = s.groups[g] || 0, bud = gBud[g] || 0, scale = Math.max(groupMax, bud);
           return `<button class="rank-row" data-act="group" data-g="${esc(g)}">
@@ -805,7 +804,7 @@
 
       <div class="grid-2">
         <div class="section">
-          ${sectionHead('Bajet', 'Ikut kategori', `${money(s.expense)} daripada ${money(budTotal)}`, `<button class="link-btn" data-act="manage-budget">Ubah</button>`)}
+          ${sectionHead('', 'Bajet ikut kategori', `${money(s.expense)} daripada ${money(budTotal)}`, `<button class="link-btn" data-act="manage-budget">Ubah</button>`)}
           ${budgeted.length ? `<div class="card"><div class="rank">${budgeted.map((c) => {
             const sp = s.cats[c.id] || 0, bud = num(c.budget), pct = (sp / bud) * 100;
             return `<div class="rank-row">
@@ -816,9 +815,9 @@
           }).join('')}</div></div>` : '<div class="empty">Belum ada bajet kategori.</div>'}
         </div>
         <div class="section">
-          ${sectionHead('Pendapatan', 'Ikut sumber', '', `<span class="aside pos money">${fmt(s.income)}</span>`)}
+          ${sectionHead('', 'Pendapatan ikut sumber', '', `<span class="aside pos money">${fmt(s.income)}</span>`)}
           ${categories('income').filter((c) => s.cats[c.id]).length ? `<div class="list">${categories('income').filter((c) => s.cats[c.id]).map((c) => `<div class="row"><span class="row-ico">${esc(c.icon)}</span>
-            <span class="row-main"><span class="t">${esc(c.name)}</span><span class="s">${esc(c.group)} · ${Math.round((s.cats[c.id] / s.income) * 100)}%</span></span>
+            <span class="row-main"><span class="t">${esc(c.name)}</span><span class="s">${esc(c.group)}, ${Math.round((s.cats[c.id] / s.income) * 100)}%</span></span>
             <span class="row-amt pos">${money(s.cats[c.id])}</span></div>`).join('')}</div>` : '<div class="empty">Belum ada pendapatan direkod bulan ni.</div>'}
         </div>
       </div>`;
@@ -832,7 +831,7 @@
     const liab = all.reduce((n, a) => n + Math.max(0, -(b[a.id] || 0)), 0);
     return `
       <section class="hero">
-        <div class="hero-top"><div><div class="eyebrow">Semua akaun</div><h2 class="money">${fmt(assets - liab)}</h2><p>Nilai bersih: aset tolak hutang</p></div></div>
+        <div class="hero-top"><div><h2 class="money">${fmt(assets - liab)}</h2><p>Semua akaun. Nilai bersih: aset tolak hutang</p></div></div>
         <div class="kpi-grid">
           <div class="kpi"><div class="kpi-label">Tunai & bank</div><div class="kpi-value money">${fmt(tot('debit'))}</div></div>
           <div class="kpi"><div class="kpi-label">Pelaburan</div><div class="kpi-value money">${fmt(tot('invest'))}</div></div>
@@ -1124,7 +1123,7 @@
       <div class="note-box">
         <div style="font-size:12.5px">${isCredit ? 'Hutang semasa' : a.group === 'invest' ? 'Nilai semasa' : 'Baki semasa'}</div>
         <div style="font-family:var(--serif);font-size:32px;color:var(--ivory)" class="money">${fmt(isCredit ? -bal : bal)}</div>
-        ${isCredit && num(a.credit_limit) ? `<div>Had ${money(num(a.credit_limit))} · Baki had ${money(num(a.credit_limit) + bal)}</div>` : ''}
+        ${isCredit && num(a.credit_limit) ? `<div>Had ${money(num(a.credit_limit))}, Baki had ${money(num(a.credit_limit) + bal)}</div>` : ''}
         ${a.note ? `<div style="margin-top:6px">${esc(a.note)}</div>` : ''}
       </div>
       <div class="field-label"><span>${isCredit ? 'Hutang sebenar sekarang' : a.group === 'invest' ? 'Nilai sebenar sekarang' : 'Baki sebenar sekarang'}</span></div>
@@ -1203,7 +1202,7 @@
         const kindLabel = { expense: 'Bayar', transfer: 'Pindah', income: 'Masuk' }[commitKind(c)];
         return `<button class="row" data-cid="${esc(c.id)}">
         <span class="row-ico">${esc(commitKind(c) === 'transfer' ? '⇄' : (idx.cat[c.category_id] || {}).icon || '📌')}</span>
-        <span class="row-main"><span class="t">${esc(c.name)}</span><span class="s">${kindLabel} · ${c.active === false ? 'Tak aktif' : (c.due_day ? `${c.due_day} hb` : 'Tiada tarikh')}${c.end_month ? ` · tamat ${esc(c.end_month)}` : ''}</span></span>
+        <span class="row-main"><span class="t">${esc(c.name)}</span><span class="s">${kindLabel}, ${c.active === false ? 'Tak aktif' : (c.due_day ? `${c.due_day} hb` : 'Tiada tarikh')}${c.end_month ? `, tamat ${esc(c.end_month)}` : ''}</span></span>
         <span class="row-amt">${amt === null ? '<span class="faint">Ikut jumlah</span>' : money(amt)}</span></button>`;
       }).join('')}</div>
       <div class="btn-row one"><button class="btn" id="cNew">Tambah komitmen</button></div>`, (sh) => {
@@ -1374,7 +1373,7 @@
         <label class="imp-tick"><input type="checkbox" data-inc="${i}" ${it.include ? 'checked' : ''} aria-label="Import baris ni"></label>
         <div class="imp-main">
           <div class="imp-top"><input class="imp-note" data-note="${i}" value="${esc(it.note)}" maxlength="120" aria-label="Nota"><span class="money ${it.row.dir === 'in' ? 'pos' : ''}">${it.row.dir === 'in' ? '+' : '-'}RM${fmtAbs(it.row.amount)}</span></div>
-          <div class="imp-raw">${esc(fmtD(it.row.date))} · ${esc(it.row.raw)}</div>
+          <div class="imp-raw">${esc(fmtD(it.row.date))}, ${esc(it.row.raw)}</div>
           ${it.dup ? `<div class="imp-why dup">Dah ada: ${esc(it.dup.note || TX_LABEL[it.dup.type])}, ${esc(fmtD(String(it.dup.date)))}</div>` : `<div class="imp-why">${esc(it.why || '')}</div>`}
           <select class="input imp-sel" data-sel="${i}">${options(it)}</select>
         </div>
@@ -1396,7 +1395,7 @@
     const checks = st.checks.map((c) => `<div class="imp-check ${c.ok ? 'ok' : 'bad'}">${c.ok ? '✓' : '✗'} ${esc(c.label)}${c.ok || c.got == null ? '' : `: dapat RM${KK.fmt(c.got)}, penyata RM${c.want == null ? '?' : KK.fmt(c.want)}`}${c.detail ? ` (${esc(c.detail)})` : ''}</div>`).join('');
     body.innerHTML = `
       <div class="note-box">
-        <strong>${esc(acc.name)}</strong> · penyata ${esc(dayLabel(st.date).split(', ')[1])} ${esc(st.date.slice(0, 4))} · ${st.rows.length} baris
+        <strong>${esc(acc.name)}</strong>, penyata ${esc(dayLabel(st.date).split(', ')[1])} ${esc(st.date.slice(0, 4))}, ${st.rows.length} baris
         <div style="margin-top:8px">${checks}</div>
       </div>
       ${st.ok ? '' : '<div class="note-box bad-box" style="margin-top:10px">Jumlah tak sepadan dengan penyata, maksudnya ada baris yang tak terbaca dengan betul. Import disekat supaya data tak salah. Hantar PDF ni kepada Claude untuk dibaiki.</div>'}
